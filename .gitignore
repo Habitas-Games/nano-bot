@@ -1,0 +1,18 @@
+# Godot 4 — auto-generated cache (never commit)
+.godot/
+
+# Android export
+/android/
+
+# Auto-generated match replays (runtime output)
+/replays/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor metadata
+*.swp
+*.swo
+.vscode/settings.json
