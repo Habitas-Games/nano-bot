@@ -209,6 +209,36 @@
     font-size: 13px; color: var(--muted); text-align: center;
   }
 
+  /* ── modal ── */
+  .modal {
+    display: none; position: fixed; z-index: 1000;
+    left: 0; top: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+  .modal.active { display: flex; align-items: center; justify-content: center; }
+  .modal-content {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px; text-align: center;
+    max-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  }
+  .modal-header { font-size: 16px; font-weight: 700; color: var(--heading); margin-bottom: 18px; }
+  .modal-qr {
+    background: #fff; border-radius: 10px; padding: 16px;
+    margin: 20px 0; display: inline-block;
+  }
+  .modal-qr img {
+    width: 200px; height: 200px;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  .modal-text { font-size: 13px; color: var(--text); margin: 16px 0; line-height: 1.6; }
+  .modal-close {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text); padding: 8px 16px; border-radius: 6px;
+    cursor: pointer; font-size: 12px; margin-top: 16px;
+    transition: all .15s;
+  }
+  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
+
   /* ── footer ── */
   footer {
     border-top: 1px solid var(--border);
@@ -526,18 +556,7 @@ func what_to_do_next(map_info: MapInfo, my_bots: Array) -> void:
       <div class="icon">🏦</div>
       <h3>De Una</h3>
       <p>Banco Pichincha (Ecuador). Scan the QR with your banking app.</p>
-      <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 6px;">
-        <img src="assets/deuna_qr.png" alt="De Una QR code" style="width: 120px; height: 120px; image-rendering: pixelated;">
-      </div>
-    </div>
-  </div>
-
-  <div style="margin-top: 32px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; text-align: center;">
-    <div style="font-size: 13px; color: var(--text); margin-bottom: 12px;">
-      <strong>Escanea el QR con tu app bancaria para enviar tu aporte. ¡Muchas gracias!</strong>
-    </div>
-    <div style="font-size: 12px; color: var(--muted);">
-      (Scan the QR with your banking app to contribute. Thank you!)
+      <button onclick="openDeUnaModal()" class="btn btn-secondary">View QR code</button>
     </div>
   </div>
 
@@ -564,6 +583,36 @@ func what_to_do_next(map_info: MapInfo, my_bots: Array) -> void:
     <span style="color:var(--muted)">Built with Godot 4</span>
   </div>
 </footer>
+
+<!-- ── DE UNA MODAL ────────────────────────────────────────────────────────────── -->
+<div id="deUnaModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Pago con De Una</div>
+    <div class="modal-qr">
+      <img src="assets/deuna_qr.png" alt="De Una QR code">
+    </div>
+    <div class="modal-text">
+      <strong>Escanea el QR con tu app bancaria para enviar tu aporte. ¡Muchas gracias!</strong><br>
+      <span style="color:var(--muted); font-size:11px; margin-top:8px; display:block;">(Scan the QR with your banking app to contribute. Thank you!)</span>
+    </div>
+    <button class="modal-close" onclick="closeDeUnaModal()">Cerrar / Close</button>
+  </div>
+</div>
+
+<script>
+function openDeUnaModal() {
+  document.getElementById('deUnaModal').classList.add('active');
+}
+function closeDeUnaModal() {
+  document.getElementById('deUnaModal').classList.remove('active');
+}
+// Close modal when clicking outside
+document.getElementById('deUnaModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeDeUnaModal();
+  }
+});
+</script>
 
 </body>
 </html>
