@@ -364,6 +364,53 @@
   </div>
 </section>
 
+<!-- ── GODOT ─────────────────────────────────────────────────────────────── -->
+<section id="godot">
+  <div class="section-label">Technology</div>
+  <h2>Built with Godot 4</h2>
+  <p style="color:var(--muted); max-width:620px">
+    nano-bot runs in <strong>Godot 4.6+</strong> — a free, open-source game engine.
+    The entire platform (simulation, replay viewer, tournament runner) is written in GDScript.
+    Your strategy is also GDScript, so you're coding in the same language as the engine.
+  </p>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:14px; margin-top:32px;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px;">
+      <div style="font-size:32px; margin-bottom:10px;">⬇️</div>
+      <h3 style="font-size:14px; margin-bottom:6px; color:var(--heading);">Install Godot 4.6+</h3>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
+        Download the free, open-source Godot editor from godotengine.org.
+      </p>
+      <a href="https://godotengine.org/download" style="color:var(--accent); font-size:12px; font-weight:600;">Download Godot →</a>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px;">
+      <div style="font-size:32px; margin-bottom:10px;">📚</div>
+      <h3 style="font-size:14px; margin-bottom:6px; color:var(--heading);">Learn GDScript</h3>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
+        GDScript is Python-like and beginner-friendly. Official docs and tutorials available.
+      </p>
+      <a href="https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/" style="color:var(--accent); font-size:12px; font-weight:600;">GDScript guide →</a>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px;">
+      <div style="font-size:32px; margin-bottom:10px;">🎮</div>
+      <h3 style="font-size:14px; margin-bottom:6px; color:var(--heading);">Open the project</h3>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
+        Clone nano-bot, open it in Godot, and the editor handles the rest. Press Run to start.
+      </p>
+      <a href="#start" style="color:var(--accent); font-size:12px; font-weight:600;">See setup →</a>
+    </div>
+  </div>
+
+  <div style="margin-top:32px; padding:18px; background:var(--surface2); border-radius:10px; border-left:3px solid var(--accent);">
+    <h3 style="font-size:14px; margin-bottom:6px; color:var(--accent);">Why Godot?</h3>
+    <p style="font-size:13px; color:var(--muted); margin:0;">
+      Godot is free, lightweight, and cross-platform. GDScript is the fastest way to prototype game logic.
+      No compilation step, no external dependencies — just write code and hit Run.
+      Perfect for rapid iteration in a programming competition.
+    </p>
+  </div>
+</section>
+
 <!-- ── GETTING STARTED ───────────────────────────────────────────────────── -->
 <section id="start">
   <div class="section-label">Getting started</div>
@@ -373,10 +420,14 @@
     <div class="step-row">
       <div class="step-num">1</div>
       <div class="step-body">
-        <h3>Clone the project and open it in Godot 4.6+</h3>
-        <p>No additional dependencies — everything runs inside the engine.</p>
-        <pre>git clone https://github.com/mnavas/nano-bot.git
-# Open the nano-bot/ folder in Godot 4</pre>
+        <h3>Install Godot 4.6+ and clone nano-bot</h3>
+        <p>Download free, open-source Godot from <a href="https://godotengine.org/download" style="color:var(--accent)">godotengine.org</a>.</p>
+        <pre>git clone https://github.com/Habitas-Games/nano-bot.git
+cd nano-bot
+# Open in Godot: Project Manager → Import → select nano-bot/ folder</pre>
+        <p style="font-size:12px; color:var(--muted); margin-top:12px;">
+          <a href="GODOT_SETUP.md" style="color:var(--accent);">📖 Detailed Godot setup guide</a>
+        </p>
       </div>
     </div>
     <div class="step-row">
