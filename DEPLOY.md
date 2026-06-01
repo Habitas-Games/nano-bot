@@ -25,7 +25,7 @@ This guide explains how to push the project to GitHub and enable public hosting.
 
 ## Step 2: Push local repo to GitHub
 
-Copy the repository URL from GitHub (e.g., `https://github.com/mnavas/nano-bot.git` or `git@github.com:mnavas/nano-bot.git`), then:
+Copy the repository URL from GitHub (e.g., `https://github.com/Habitas-Games/nano-bot.git` or `git@github.com:Habitas-Games/nano-bot.git`), then:
 
 ```bash
 cd /path/to/nano-bot

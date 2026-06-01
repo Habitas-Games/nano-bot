@@ -16,7 +16,7 @@ Thanks for your interest in contributing! This guide explains how to report bugs
 
 ## Reporting bugs
 
-**Before opening an issue**, check if it's already reported at [GitHub Issues](https://github.com/mnavas/nano-bot/issues).
+**Before opening an issue**, check if it's already reported at [GitHub Issues](https://github.com/Habitas-Games/nano-bot/issues).
 
 ### Bug report template
 
@@ -131,7 +131,7 @@ Fixes #42
 ## Questions?
 
 - Check the [participant guide](docs/participant_guide.html)
-- Review existing [issues](https://github.com/mnavas/nano-bot/issues) and [PRs](https://github.com/mnavas/nano-bot/pulls)
+- Review existing [issues](https://github.com/Habitas-Games/nano-bot/issues) and [PRs](https://github.com/Habitas-Games/nano-bot/pulls)
 - Open a discussion or issue labeled `question`
 
 ---
