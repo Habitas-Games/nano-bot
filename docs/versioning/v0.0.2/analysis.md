@@ -441,7 +441,523 @@ User workflow:
 
 ---
 
-## 9. WHAT THIS ANALYSIS MEANS
+## 9. COMPONENT ANALYSIS
+
+### What is a Component?
+A discrete UI/functional element that serves one specific purpose. Each component must be justified.
+
+---
+
+### COMPONENT 1: Canvas (Map Drawing Area)
+
+**What it is:** Central area where user paints/places elements. Shows grid of tiles.
+
+**Purpose:** 
+- Display the map being edited
+- Receive all primary user input (painting, placing)
+- Show visual feedback (selected cells, hover highlights)
+
+**Responsibilities:**
+- Render terrain grid with sprites
+- Render bloodstream arrows
+- Render element positions (habitas, AZN, zones)
+- Draw grid lines
+- Highlight selected cell
+- Convert screen coords to grid coords
+- Accept left-click, right-click, middle-click input
+
+**Dependencies:**
+- Grid data (terrain density array)
+- Bloodstreams array
+- Elements arrays (habitas, AZN, zones)
+- Sprite assets
+- Zoom/scroll state
+
+**Does it make sense?** ✓ YES
+- Without canvas, there's no map editing
+- Essential, non-negotiable
+
+**What it needs:**
+- Coordinate system (screen → grid conversion)
+- Collision detection (which cell am I clicking?)
+- Rendering order (terrain, then elements, then highlight)
+- Visual feedback on hover (show coordinates)
+
+---
+
+### COMPONENT 2: Left Panel - Tool Groups
+
+**What it is:** Vertical panel with expandable sections (Terrain, Elements, Zones, etc.)
+
+**Purpose:**
+- Show available tools in one place
+- Let user select what to do
+- Show configuration options for each tool
+
+**Responsibilities:**
+- Display terrain density options (LOW, MEDIUM, HIGH, BONE)
+- Display element type options (Habitas, AZN, Streams, Zones)
+- Show element-specific options (stream direction, zone player)
+- Show action buttons (Add Border)
+- Visual feedback for selected option
+
+**Dependencies:**
+- Selected tool state
+- Selected density state
+- Selected element type state
+- Selected element config (direction, player, quantity)
+
+**Does it make sense?** ✓ YES
+- User needs to select what to do before doing it
+- Centralizes all options
+- Standard pattern (left toolbar)
+- Essential for discoverability
+
+**What it needs:**
+- Clear visual feedback (what's selected)
+- Organized grouping (so it's not overwhelming)
+- Expandable sections (hides non-essential options)
+- Tooltips (explain what each button does)
+
+---
+
+### COMPONENT 3: Right Panel - Legend & Info
+
+**What it is:** Display panel showing map information and reference guide.
+
+**Purpose:**
+- Show what user created (statistics)
+- Provide color reference (like simulator legend)
+- Show details of selected element
+- Feedback on what's on the map
+
+**Responsibilities:**
+- Display map name, dimensions
+- Show color legend (terrain types)
+- Show element legend (symbols)
+- Display statistics (cell counts, element counts)
+- Show selected element details (if any)
+- Live-update as user edits
+
+**Dependencies:**
+- Map data (to calculate statistics)
+- Current selection (to show details)
+- Grid state (to count cells)
+
+**Does it make sense?** ✓ YES
+- User should know what they created
+- Statistics reveal problems (e.g., "no habitas points")
+- Reference guide helps remember colors
+- Feedback closes the loop (I painted, I can see the result)
+
+**What it needs:**
+- Live updating (whenever grid changes)
+- Accurate counting algorithm
+- Clear formatting (easy to scan)
+- Selection details when element selected
+
+---
+
+### COMPONENT 4: Top Toolbar
+
+**What it is:** Horizontal bar with quick-access buttons for file and history operations.
+
+**Purpose:**
+- Provide quick access to common operations
+- Standard location for file operations
+- Minimize visits to dialogs
+
+**Responsibilities:**
+- Load Map button (opens file picker)
+- Save button (exports JSON)
+- Clear button (reset map)
+- Undo button (revert last action)
+- Zoom info (show current level, presets)
+- Pan help (keyboard shortcut hint)
+
+**Dependencies:**
+- File system (to load/save)
+- History state (for undo enabled/disabled)
+- Zoom state
+- Map data
+
+**Does it make sense?** ✓ MOSTLY
+- Load/Save are essential (file operations belong in toolbar)
+- Undo is frequent, deserves quick access
+- Clear is destructive (should be visible but not prominent)
+
+**What it needs:**
+- Confirmation dialogs (for destructive ops)
+- Clear visual hierarchy (Save prominent, Clear less so)
+- State feedback (Undo disabled if nothing to undo)
+
+**Question:** Does Zoom belong here or in right panel?
+- Current choice: Quick access (toolbar) + info display (right)
+- Reasonable but could be debated
+
+---
+
+### COMPONENT 5: Scrollbars
+
+**What it is:** Horizontal and vertical bars for navigation.
+
+**Purpose:**
+- Allow precise navigation without middle-click
+- Visual indicator of scroll position
+- Accessibility (some users prefer scrollbars)
+
+**Responsibilities:**
+- Display current scroll position
+- Allow clicking to jump
+- Allow dragging for smooth scroll
+- Update on zoom/pan changes
+- Calculate thumb size based on visible ratio
+
+**Dependencies:**
+- Scroll state (scroll_x, scroll_y)
+- Map size
+- Visible canvas size
+- Zoom level
+
+**Does it make sense?** ✓ YES
+- Navigation is essential for large maps
+- Scrollbars are standard UI element
+- Provides accessibility alternative to middle-click
+- Visual feedback of position
+
+**What it needs:**
+- Proper range calculation (based on map size * zoom)
+- Thumb size reflects visible ratio
+- Smooth interaction (no stuttering)
+- Visual styling (clear appearance)
+
+---
+
+### COMPONENT 6: Status Bar / Coordinate Display
+
+**What it is:** Text area showing useful information.
+
+**Purpose:**
+- Show user what's happening
+- Display grid coordinates on hover
+- Show error messages
+- Display hints
+
+**Current state in analysis:** NOT INCLUDED
+
+**Should it exist?** ✓ YES
+- Coordinates are useful for precision placement
+- Messages inform user (no action taken, too many cells, etc.)
+- Hints guide first-time users
+
+**Why it's missing:** Oversight in analysis. Should be added.
+
+**What it needs:**
+- Coordinate display (X, Y when hovering)
+- Message queue (temporary status messages)
+- Hint text (e.g., "Right-click to flood fill")
+
+---
+
+### COMPONENT 7: File Load Dialog
+
+**What it is:** UI for selecting which map to load.
+
+**Purpose:**
+- Let user browse available maps
+- Select one to open in editor
+
+**Responsibilities:**
+- List all .json files in maps/
+- Show map name (filename without extension)
+- On selection: load map, clear history, reset view
+- On cancel: close dialog, return to editor
+
+**Dependencies:**
+- File system access
+- JSON parsing
+- Map data structure
+
+**Does it make sense?** ✓ YES
+- Can't edit maps without loading them
+- Necessary for iterative editing
+
+**What it needs:**
+- File list from res://maps/ directory
+- Error handling (file not found, invalid JSON)
+- Feedback (loading... spinner, loaded successfully)
+
+---
+
+### COMPONENT 8: Undo/History System
+
+**What it is:** Mechanism to store and revert map states.
+
+**Purpose:**
+- Allow user to undo mistakes
+- Provide confidence to experiment
+
+**Responsibilities:**
+- Save state before each action
+- Maintain array of states (max 50)
+- Revert to previous state on undo
+- Track history position
+- Disable undo when at oldest state
+
+**Dependencies:**
+- Full grid state
+- Element arrays state
+- History array
+- History index
+
+**Does it make sense?** ✓ YES
+- Users will make mistakes
+- Undo is expected feature
+- Essential for usability
+
+**What it needs:**
+- Proper state copying (not references)
+- Memory management (max 50 states)
+- Clear disabled state (button greyed out)
+
+---
+
+### COMPONENT 9: Mode/Tool Selection System
+
+**What it is:** Mechanism to track what the user is currently doing.
+
+**Purpose:**
+- Ensure user knows their active tool
+- Prevent confusion (am I painting terrain or placing habitas?)
+- Route input to correct handler
+
+**Current state:** Described as left panel with groups
+
+**Does it make sense?** ✓ YES
+- Mode prevents accidents
+- Clear state reduces confusion
+- Essential for complex interactions
+
+**What it needs:**
+- Single active mode at a time
+- Visual feedback of current mode
+- Mode-specific options shown/hidden
+- Transitions are clear (old mode hidden, new shown)
+
+---
+
+## 10. MISSING COMPONENTS ANALYSIS
+
+### Missing Component A: Confirmation Dialogs
+
+**What:** Dialogs asking "Are you sure?" for destructive operations
+
+**Operations that need it:**
+- Clear map (deletes everything)
+- Load map (discards unsaved changes)
+
+**Why it's missing:** Oversight in analysis
+
+**Should it exist?** ✓ YES
+- Destructive operations should have safety net
+- Users accidentally click things
+- Standard UX pattern
+
+**What it needs:**
+- "Are you sure?" message
+- Cancel button (safe default)
+- Confirm button (red/warning color)
+- List what will happen
+
+---
+
+### Missing Component B: Error Display
+
+**What:** Show errors when something fails
+
+**Scenarios:**
+- Load fails (file not found, invalid JSON)
+- Save fails (permission denied, disk full)
+- Paint fails (unexpected condition)
+
+**Why it's missing:** Assumed it wouldn't fail, but it will
+
+**Should it exist?** ✓ YES
+- Users need to know when something went wrong
+- Prevents silent failures
+- Helps debugging
+
+**What it needs:**
+- Error message display (temporary popup or panel)
+- Clear explanation (not technical jargon)
+- Action to take (retry, check file, etc.)
+
+---
+
+### Missing Component C: Selection Highlighting
+
+**What:** Visual indication of what's selected on canvas
+
+**Examples:**
+- Current cell (yellow border, different color)
+- Selected element (outline, glow, highlight)
+- Brush preview (before clicking)
+
+**Why it's missing:** Assumed but not fully described
+
+**Should it exist?** ✓ YES (CRITICAL)
+- Shows what will happen before it happens
+- Prevents mistakes
+- Provides visual feedback
+- Essential for usability
+
+**What it needs:**
+- Cell under cursor: highlight it
+- Element selected: show details in right panel
+- Before paint: show which cell will change
+- Visual style: distinct but not garish
+
+---
+
+### Missing Component D: Zoom Indicator
+
+**What:** Show current zoom level (e.g., "1.5x" or "150%")
+
+**Where:** In toolbar or corner
+
+**Why it's missing:** Described as part of toolbar but not detailed
+
+**Should it exist?** ✓ YES (NICE-TO-HAVE)
+- User should know their zoom level
+- Useful for reporting bugs
+- Helps understand why things look small/large
+
+**What it needs:**
+- Current zoom display
+- Zoom presets (0.5x, 1.0x, 2.0x, 3.0x)
+- Zoom slider (optional)
+
+---
+
+### Missing Component E: Input Validation
+
+**What:** Check if user actions make sense
+
+**Examples:**
+- "You placed 0 habitas points - game requires at least 2"
+- "No injection zones defined - game won't start"
+- "AZN node in unreachable cell - game will ignore it"
+
+**Why it's missing:** Not considered in analysis
+
+**Should it exist?** ✓ MAYBE (Phase 5 - Polish)
+- Prevents broken maps
+- Educates user about requirements
+- But: Could be annoying (warnings for everything)
+
+**Trade-off:**
+- Include basic validation (at least 1 habitas)
+- Skip nitpicky validation (reachability analysis)
+
+**What it needs:**
+- Rule list (minimum requirements)
+- Warning display (doesn't block save)
+- Clear explanation (why is this a problem?)
+
+---
+
+### Missing Component F: Keyboard Shortcuts
+
+**What:** Direct keyboard commands for common operations
+
+**Examples:**
+- Ctrl+S: Save
+- Ctrl+Z: Undo
+- Arrow keys: Pan
+- 1-4: Select terrain density (LOW-BONE)
+
+**Why it's missing:** Listed as "Phase 5 Polish" but not detailed
+
+**Should it exist?** ✓ YES (Phase 2 minimum)
+- Power users expect shortcuts
+- Essential for efficiency
+- Standard patterns (Ctrl+S for save)
+
+**What it needs:**
+- Map of shortcut → action
+- Display in UI (tooltip or help)
+- Help/About showing all shortcuts
+
+---
+
+## 11. COMPONENT DEPENDENCY MAP
+
+```
+Canvas (Core)
+├── requires: Grid data, Sprites, Zoom state, Scroll state
+├── provides: Visual feedback, Click locations
+└── updates: Selection highlight, Coordinate display
+
+Left Panel
+├── requires: Tool list, Element list
+├── provides: Selected tool, Selected density, Selected element
+└── updates: Based on user clicks
+
+Right Panel
+├── requires: Map data, Statistics calculator
+├── provides: Reference information
+└── updates: Live as grid changes
+
+Toolbar
+├── requires: File system, History state
+├── provides: File operations, Undo trigger
+└── updates: Undo button enabled/disabled
+
+Scrollbars
+├── requires: Scroll state, Canvas size, Map size
+├── provides: Visual scroll position, Jump locations
+└── updates: When zoom/pan changes
+
+History System (Core)
+├── requires: Full map state
+├── provides: Previous state
+└── updates: On every action
+
+Input Handler
+├── requires: All components
+├── provides: Coordinated input handling
+└── updates: Tool-specific behavior
+```
+
+---
+
+## 12. SUMMARY: WHAT MAKES SENSE
+
+### Essential (Must Have)
+- ✓ Canvas (map display and painting)
+- ✓ Left panel (tool selection)
+- ✓ History system (undo)
+- ✓ File operations (load/save)
+- ✓ Input handler (coordinate math)
+
+### Important (Should Have)
+- ✓ Right panel (feedback and reference)
+- ✓ Scrollbars (large map navigation)
+- ~ Status bar (coordinates and messages)
+- ~ Selection highlighting (visual feedback)
+
+### Missing Critical
+- ✗ Confirmation dialogs (safety)
+- ✗ Error display (debugging)
+- ✗ Selection highlighting (usability)
+
+### Should Add Later (Phase 2+)
+- Keyboard shortcuts
+- Validation warnings
+- Zoom indicator
+- Help/About dialog
+
+
 
 ### Summary
 We're building an **editor**, not a game UI. Editors have:
