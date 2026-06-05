@@ -19,6 +19,8 @@ var terrain_buttons: Dictionary = {}
 var history: Array = []
 var history_index: int = -1
 const MAX_HISTORY: int = 50
+var h_scrollbar: HScrollBar
+var v_scrollbar: VScrollBar
 
 func _ready() -> void:
 	_load_sprites()
@@ -130,14 +132,30 @@ func _setup_ui() -> void:
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
 	panel.add_child(back_btn)
 
-	# RIGHT SIDE
+	# RIGHT SIDE with scrollbars
 	var right := VBoxContainer.new()
 	root.add_child(right)
 
 	var status := Label.new()
-	status.text = "Click & drag to paint | Right-click to fill | Scroll to zoom | Arrow keys to scroll"
+	status.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom | Drag scrollbars to pan"
 	status.add_theme_font_size_override("font_size", 10)
 	right.add_child(status)
+
+	# Canvas container with scrollbars
+	var canvas_container := VBoxContainer.new()
+	right.add_child(canvas_container)
+
+	# Horizontal scrollbar
+	h_scrollbar = HScrollBar.new()
+	h_scrollbar.custom_minimum_size = Vector2(0, 15)
+	h_scrollbar.value_changed.connect(_on_h_scroll)
+	canvas_container.add_child(h_scrollbar)
+
+	# Vertical scrollbar
+	v_scrollbar = VScrollBar.new()
+	v_scrollbar.custom_minimum_size = Vector2(15, 0)
+	v_scrollbar.value_changed.connect(_on_v_scroll)
+	right.add_child(v_scrollbar)
 
 func _select_density(dens: String) -> void:
 	selected_density = dens
@@ -186,11 +204,13 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.1, 3.0)
+			_update_scrollbars()
 			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = max(zoom - 0.1, 0.5)
+			_update_scrollbars()
 			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
@@ -322,6 +342,7 @@ func _load_map(filename: String) -> void:
 		history.clear()
 		history_index = -1
 		_save_state()  # Save initial state
+		_update_scrollbars()
 		queue_redraw()
 
 func _save_map() -> void:
@@ -347,6 +368,36 @@ func _save_map() -> void:
 	}
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
+
+func _update_scrollbars() -> void:
+	if not h_scrollbar or not v_scrollbar:
+		return
+
+	var canvas_width = get_size().x - 220 - 15  # 220 for panel, 15 for v-scrollbar
+	var canvas_height = get_size().y - 30 - 15  # 30 for status, 15 for h-scrollbar
+
+	var total_width = int(map_width * TILE_SIZE * zoom)
+	var total_height = int(map_height * TILE_SIZE * zoom)
+
+	# Update horizontal scrollbar
+	h_scrollbar.min_value = 0
+	h_scrollbar.max_value = max(0, total_width - canvas_width)
+	h_scrollbar.page = canvas_width
+	h_scrollbar.value = scroll_x
+
+	# Update vertical scrollbar
+	v_scrollbar.min_value = 0
+	v_scrollbar.max_value = max(0, total_height - canvas_height)
+	v_scrollbar.page = canvas_height
+	v_scrollbar.value = scroll_y
+
+func _on_h_scroll(value: float) -> void:
+	scroll_x = int(value)
+	queue_redraw()
+
+func _on_v_scroll(value: float) -> void:
+	scroll_y = int(value)
+	queue_redraw()
 
 func _save_state() -> void:
 	# Remove any states after current index (if we undid and made new changes)
