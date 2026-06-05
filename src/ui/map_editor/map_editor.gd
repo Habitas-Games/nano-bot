@@ -76,7 +76,7 @@ func _init_grid() -> void:
 	"""Initialize empty grid with default density"""
 	grid.clear()
 	for y in range(map_height):
-		var row: Array[String] = []
+		var row: Array = []
 		for x in range(map_width):
 			row.append("low")
 		grid.append(row)
