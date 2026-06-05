@@ -64,7 +64,7 @@ func _setup_ui() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
 
-	# LEFT PANEL
+	# LEFT PANEL - Scrollable
 	var panel_bg := PanelContainer.new()
 	panel_bg.custom_minimum_size = Vector2(220, 0)
 	root.add_child(panel_bg)
@@ -73,9 +73,14 @@ func _setup_ui() -> void:
 	panel_style.bg_color = Color(0.15, 0.15, 0.15)
 	panel_bg.add_theme_stylebox_override("panel", panel_style)
 
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	panel_bg.add_child(scroll)
+
 	var panel := VBoxContainer.new()
 	panel.add_theme_constant_override("separation", 10)
-	panel_bg.add_child(panel)
+	scroll.add_child(panel)
 
 	var title := Label.new()
 	title.text = "Map Editor"
@@ -408,6 +413,8 @@ func _input(event: InputEvent) -> void:
 					queue_redraw()
 				elif editor_mode == "stream" and event.button_index == MOUSE_BUTTON_LEFT:
 					_save_state()
+					# Remove any existing stream at this location
+					bloodstreams = bloodstreams.filter(func(s): return s["x"] != grid_x or s["y"] != grid_y)
 					bloodstreams.append({"x": grid_x, "y": grid_y, "stream": selected_stream_direction})
 					grid[grid_y][grid_x] = "medium"  # Bloodstreams are medium density
 					queue_redraw()
@@ -514,12 +521,14 @@ func _load_map(filename: String) -> void:
 		map_height = data.get("height", DEFAULT_HEIGHT)
 		_init_grid()
 
-		# Load terrain
+		# Load terrain and bloodstreams
+		bloodstreams.clear()
 		for cell in data.get("cells", []):
 			if "x" in cell and "y" in cell and cell["x"] < map_width and cell["y"] < map_height:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
+				# If cell has a stream, it's a bloodstream
 				if cell.get("stream"):
-					bloodstreams.append(cell)
+					bloodstreams.append({"x": cell["x"], "y": cell["y"], "stream": cell["stream"]})
 
 		# Load other elements
 		habitas_points = data.get("habitas_points", []).duplicate()
