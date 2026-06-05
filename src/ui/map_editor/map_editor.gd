@@ -1,7 +1,7 @@
 class_name MapEditor
 extends Control
 
-# Phase 1: Core Rendering - Display Maps Exactly Like Simulator
+# Phase 1-2: Core Rendering + Terrain Editing
 
 const CELL_SIZE := 16
 
@@ -30,6 +30,13 @@ var scroll_x: int = 0
 var scroll_y: int = 0
 var canvas_rect: Rect2 = Rect2()
 
+# Editing state (Phase 2)
+var selected_density: int = Density.LOW
+var is_painting: bool = false
+var last_paint_pos: Vector2i = Vector2i(-1, -1)
+var density_buttons: Dictionary = {}
+var status_label: Label
+
 # Constants
 const STREAM_COLOR := Color(0.70, 0.25, 0.25, 0.80)
 const GRID_COLOR := Color(0.00, 0.00, 0.00, 0.12)
@@ -56,7 +63,7 @@ func _load_textures() -> void:
 	azn_texture = load("res://assets/markers/azn_node.png")
 
 func _setup_ui() -> void:
-	"""Create minimal UI: just buttons and labels"""
+	"""Create UI: toolbar, canvas area, and control panel"""
 	var root = HBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
@@ -67,11 +74,11 @@ func _setup_ui() -> void:
 	root.add_child(left)
 
 	# Status bar
-	var status = Label.new()
-	status.text = "Terrain: LOW | Scroll: zoom | Middle-drag: pan"
-	status.add_theme_font_size_override("font_size", 10)
-	status.custom_minimum_size = Vector2(0, 30)
-	left.add_child(status)
+	status_label = Label.new()
+	status_label.text = "Terrain: LOW | Click: paint | Drag: continuous | Right-click: fill | Scroll: zoom"
+	status_label.add_theme_font_size_override("font_size", 10)
+	status_label.custom_minimum_size = Vector2(0, 30)
+	left.add_child(status_label)
 
 	# Toolbar
 	var toolbar = HBoxContainer.new()
@@ -88,6 +95,16 @@ func _setup_ui() -> void:
 	save_btn.text = "Save"
 	save_btn.pressed.connect(_show_save_dialog)
 	toolbar.add_child(save_btn)
+
+	var clear_btn = Button.new()
+	clear_btn.text = "Clear"
+	clear_btn.pressed.connect(_clear_map)
+	toolbar.add_child(clear_btn)
+
+	var border_btn = Button.new()
+	border_btn.text = "Border"
+	border_btn.pressed.connect(_add_border)
+	toolbar.add_child(border_btn)
 
 	# Canvas spacer (will draw here)
 	var spacer = Control.new()
@@ -109,9 +126,14 @@ func _setup_ui() -> void:
 	style.bg_color = Color(0.15, 0.15, 0.15)
 	right.add_theme_stylebox_override("panel", style)
 
+	var scroll = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	right.add_child(scroll)
+
 	var info = VBoxContainer.new()
-	info.add_theme_constant_override("separation", 10)
-	right.add_child(info)
+	info.add_theme_constant_override("separation", 8)
+	scroll.add_child(info)
 
 	var title = Label.new()
 	title.text = "Map Editor"
@@ -122,6 +144,32 @@ func _setup_ui() -> void:
 	size_label.text = "Size: 60x60"
 	size_label.add_theme_font_size_override("font_size", 10)
 	info.add_child(size_label)
+
+	info.add_child(HSeparator.new())
+
+	# Density selector (Phase 2)
+	var terrain_title = Label.new()
+	terrain_title.text = "Terrain"
+	terrain_title.add_theme_font_size_override("font_size", 11)
+	info.add_child(terrain_title)
+
+	for density_val in [Density.LOW, Density.MEDIUM, Density.HIGH, Density.BONE]:
+		var btn = Button.new()
+		var density_name = _density_to_string(density_val).to_upper()
+		btn.text = density_name
+		btn.custom_minimum_size = Vector2(0, 32)
+		btn.toggle_mode = true
+		btn.button_pressed = (density_val == Density.LOW)
+		
+		var density_copy = density_val
+		btn.pressed.connect(func():
+			selected_density = density_copy
+			_update_density_buttons()
+			_update_status()
+		)
+		
+		info.add_child(btn)
+		density_buttons[density_val] = btn
 
 func _load_default_map() -> void:
 	"""Load first available map from res://maps/"""
@@ -235,6 +283,15 @@ func _string_to_density(s: String) -> int:
 		"high": return Density.HIGH
 		"bone": return Density.BONE
 	return Density.LOW
+
+func _density_to_string(d: int) -> String:
+	"""Convert Density enum to string"""
+	match d:
+		Density.LOW: return "low"
+		Density.MEDIUM: return "medium"
+		Density.HIGH: return "high"
+		Density.BONE: return "bone"
+	return "low"
 
 func _string_to_stream_dir(s: String) -> int:
 	"""Convert string to StreamDir enum"""
@@ -358,7 +415,12 @@ func _stream_to_vec(dir: int) -> Vector2:
 	return Vector2.ZERO
 
 func _input(event: InputEvent) -> void:
-	"""Handle zoom and pan"""
+	"""Handle all input: zoom, pan, painting, filling"""
+	var cx = int(canvas_rect.position.x)
+	var cy = int(canvas_rect.position.y)
+	var cw = int(canvas_rect.size.x)
+	var ch = int(canvas_rect.size.y)
+
 	# Zoom with scroll wheel
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
@@ -372,14 +434,136 @@ func _input(event: InputEvent) -> void:
 			get_tree().root.set_input_as_handled()
 			return
 
+		# Left click: paint cell
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			var local_pos = event.position
+			if _is_in_canvas(local_pos):
+				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+
+				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+					is_painting = true
+					last_paint_pos = Vector2i(grid_x, grid_y)
+					_paint_cell(grid_x, grid_y)
+					get_tree().root.set_input_as_handled()
+					return
+
+		# Left release: stop painting
+		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			is_painting = false
+
+		# Right click: flood fill
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var local_pos = event.position
+			if _is_in_canvas(local_pos):
+				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+
+				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+					_flood_fill(grid_x, grid_y)
+					get_tree().root.set_input_as_handled()
+					return
+
+	# Drag paint
+	if event is InputEventMouseMotion and is_painting:
+		var local_pos = event.position
+		if _is_in_canvas(local_pos):
+			var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+			var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+
+			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				if Vector2i(grid_x, grid_y) != last_paint_pos:
+					_paint_cell(grid_x, grid_y)
+					last_paint_pos = Vector2i(grid_x, grid_y)
+
 	# Pan with middle-click drag
 	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MIDDLE:
 		var delta = event.relative
-		var max_x = max(0, int(map_width * CELL_SIZE * zoom - canvas_rect.size.x))
-		var max_y = max(0, int(map_height * CELL_SIZE * zoom - canvas_rect.size.y))
+		var max_x = max(0, int(map_width * CELL_SIZE * zoom - cw))
+		var max_y = max(0, int(map_height * CELL_SIZE * zoom - ch))
 		scroll_x = clampi(scroll_x - int(delta.x), 0, max_x)
 		scroll_y = clampi(scroll_y - int(delta.y), 0, max_y)
 		queue_redraw()
+
+func _is_in_canvas(pos: Vector2) -> bool:
+	"""Check if position is inside canvas area"""
+	var cx = int(canvas_rect.position.x)
+	var cy = int(canvas_rect.position.y)
+	var cw = int(canvas_rect.size.x)
+	var ch = int(canvas_rect.size.y)
+	return pos.x >= cx and pos.x < cx + cw and pos.y >= cy and pos.y < cy + ch
+
+func _paint_cell(x: int, y: int) -> void:
+	"""Paint single cell with selected density (preserve stream_dir)"""
+	var idx = y * map_width + x
+	cells[idx]["density"] = selected_density
+	# stream_dir is preserved
+	queue_redraw()
+
+func _flood_fill(start_x: int, start_y: int) -> void:
+	"""Flood fill connected region with same density"""
+	var start_idx = start_y * map_width + start_x
+	var target_density = cells[start_idx]["density"]
+
+	var stack = [[start_x, start_y]]
+	var visited = {}
+
+	while stack.size() > 0:
+		var pos = stack.pop_back()
+		var x = pos[0]
+		var y = pos[1]
+
+		if x < 0 or x >= map_width or y < 0 or y >= map_height:
+			continue
+
+		var key = str(x) + "," + str(y)
+		if key in visited:
+			continue
+
+		var idx = y * map_width + x
+		if cells[idx]["density"] != target_density:
+			continue
+
+		visited[key] = true
+		cells[idx]["density"] = selected_density
+
+		stack.append([x + 1, y])
+		stack.append([x - 1, y])
+		stack.append([x, y + 1])
+		stack.append([x, y - 1])
+
+	queue_redraw()
+
+func _clear_map() -> void:
+	"""Clear terrain to LOW density (preserve streams)"""
+	for i in range(cells.size()):
+		cells[i]["density"] = Density.LOW
+		# stream_dir preserved
+	queue_redraw()
+
+func _add_border() -> void:
+	"""Add BONE border around map edge"""
+	# Top and bottom edges
+	for x in range(map_width):
+		cells[0 * map_width + x]["density"] = Density.BONE
+		cells[(map_height - 1) * map_width + x]["density"] = Density.BONE
+
+	# Left and right edges
+	for y in range(map_height):
+		cells[y * map_width + 0]["density"] = Density.BONE
+		cells[y * map_width + (map_width - 1)]["density"] = Density.BONE
+
+	queue_redraw()
+
+func _update_density_buttons() -> void:
+	"""Update button highlight to show selected density"""
+	for density_val in density_buttons.keys():
+		density_buttons[density_val].button_pressed = (density_val == selected_density)
+
+func _update_status() -> void:
+	"""Update status bar with current tool"""
+	var density_name = _density_to_string(selected_density).to_upper()
+	status_label.text = "Terrain: %s | Click: paint | Drag: continuous | Right-click: fill | Scroll: zoom" % density_name
 
 func _show_load_dialog() -> void:
 	"""Show load map dialog"""
