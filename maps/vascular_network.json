@@ -5,8 +5,6 @@
 	"default_density": "low",
 	"starting_azn": 150,
 	"cells": [
-		"# NORTH TISSUE FORMATION (high-density region, dense tissue)",
-		"# Creates natural chokepoint for early game",
 		{ "x": 25, "y": 5,  "density": "high" },
 		{ "x": 26, "y": 5,  "density": "high" },
 		{ "x": 27, "y": 5,  "density": "high" },
@@ -21,8 +19,6 @@
 		{ "x": 26, "y": 7,  "density": "high" },
 		{ "x": 27, "y": 7,  "density": "high" },
 		{ "x": 28, "y": 7,  "density": "high" },
-
-		"# CENTRAL BLOODSTREAM (east-west arterial flow, main highway)",
 		{ "x": 10, "y": 30, "density": "medium", "stream": "east" },
 		{ "x": 11, "y": 30, "density": "medium", "stream": "east" },
 		{ "x": 12, "y": 30, "density": "medium", "stream": "east" },
@@ -55,8 +51,6 @@
 		{ "x": 48, "y": 30, "density": "medium", "stream": "east" },
 		{ "x": 49, "y": 30, "density": "medium", "stream": "east" },
 		{ "x": 50, "y": 30, "density": "medium", "stream": "east" },
-
-		"# NORTH-SOUTH CAPILLARY (vertical flow, connects north tissue to central artery)",
 		{ "x": 27, "y": 15, "density": "medium", "stream": "south" },
 		{ "x": 27, "y": 16, "density": "medium", "stream": "south" },
 		{ "x": 27, "y": 17, "density": "medium", "stream": "south" },
@@ -72,8 +66,6 @@
 		{ "x": 27, "y": 27, "density": "medium", "stream": "south" },
 		{ "x": 27, "y": 28, "density": "medium", "stream": "south" },
 		{ "x": 27, "y": 29, "density": "medium", "stream": "south" },
-
-		"# SOUTH TISSUE FORMATION (high-density, opposite side)",
 		{ "x": 25, "y": 48, "density": "high" },
 		{ "x": 26, "y": 48, "density": "high" },
 		{ "x": 27, "y": 48, "density": "high" },
@@ -88,32 +80,24 @@
 		{ "x": 26, "y": 50, "density": "high" },
 		{ "x": 27, "y": 50, "density": "high" },
 		{ "x": 28, "y": 50, "density": "high" },
-
-		"# BONE BARRIER (natural obstacle mid-map)",
 		{ "x": 12, "y": 35, "density": "bone" },
 		{ "x": 13, "y": 35, "density": "bone" },
 		{ "x": 14, "y": 35, "density": "bone" },
 		{ "x": 12, "y": 36, "density": "bone" },
 		{ "x": 13, "y": 36, "density": "bone" },
 		{ "x": 12, "y": 37, "density": "bone" },
-
-		"# EAST TISSUE CLUSTER (fibrous region near player 1 spawn)",
 		{ "x": 48, "y": 8,  "density": "high" },
 		{ "x": 49, "y": 8,  "density": "high" },
 		{ "x": 48, "y": 9,  "density": "high" },
 		{ "x": 49, "y": 9,  "density": "high" },
 		{ "x": 50, "y": 10, "density": "high" },
 		{ "x": 51, "y": 10, "density": "high" },
-
-		"# WEST TISSUE CLUSTER (near player 0 spawn)",
 		{ "x": 7,  "y": 8,  "density": "high" },
 		{ "x": 8,  "y": 8,  "density": "high" },
 		{ "x": 7,  "y": 9,  "density": "high" },
 		{ "x": 8,  "y": 9,  "density": "high" },
 		{ "x": 6,  "y": 10, "density": "high" },
 		{ "x": 7,  "y": 10, "density": "high" },
-
-		"# EASTERN CAPILLARY (north-south flow on right side)",
 		{ "x": 50, "y": 20, "density": "medium", "stream": "south" },
 		{ "x": 50, "y": 21, "density": "medium", "stream": "south" },
 		{ "x": 50, "y": 22, "density": "medium", "stream": "south" },
@@ -124,8 +108,6 @@
 		{ "x": 50, "y": 27, "density": "medium", "stream": "south" },
 		{ "x": 50, "y": 28, "density": "medium", "stream": "south" },
 		{ "x": 50, "y": 29, "density": "medium", "stream": "south" },
-
-		"# WESTERN CAPILLARY (north-south flow on left side)",
 		{ "x": 8,  "y": 20, "density": "medium", "stream": "south" },
 		{ "x": 8,  "y": 21, "density": "medium", "stream": "south" },
 		{ "x": 8,  "y": 22, "density": "medium", "stream": "south" },
@@ -136,8 +118,6 @@
 		{ "x": 8,  "y": 27, "density": "medium", "stream": "south" },
 		{ "x": 8,  "y": 28, "density": "medium", "stream": "south" },
 		{ "x": 8,  "y": 29, "density": "medium", "stream": "south" },
-
-		"# MEDIUM DENSITY POCKETS (scattered through the tissue)",
 		{ "x": 15, "y": 15, "density": "medium" },
 		{ "x": 40, "y": 15, "density": "medium" },
 		{ "x": 15, "y": 45, "density": "medium" },
