@@ -9,10 +9,9 @@ var map_width: int = DEFAULT_WIDTH
 var map_height: int = DEFAULT_HEIGHT
 var grid: Array = []  # Array[Array] of density strings
 var selected_density: String = "low"
-var selected_stream: String = ""  # "", "north", "south", "east", "west"
+var selected_stream: String = ""
 
-var canvas: Panel
-var size_label: Label
+var canvas: Control
 var tile_info_label: Label
 var status_label: Label
 
@@ -28,7 +27,7 @@ func _setup_ui() -> void:
 
 	# Top toolbar
 	var toolbar := HBoxContainer.new()
-	toolbar.custom_minimum_size = Vector2(0, 40)
+	toolbar.custom_minimum_size = Vector2(0, 120)
 	main_container.add_child(toolbar)
 
 	# Map size controls
@@ -70,7 +69,7 @@ func _setup_ui() -> void:
 
 	# Tile selector
 	var tile_section := VBoxContainer.new()
-	tile_section.custom_minimum_size = Vector2(250, 0)
+	tile_section.custom_minimum_size = Vector2(280, 0)
 	toolbar.add_child(tile_section)
 
 	var tile_title := Label.new()
@@ -84,7 +83,7 @@ func _setup_ui() -> void:
 	for density in ["low", "medium", "high", "bone"]:
 		var btn := Button.new()
 		btn.text = density
-		btn.custom_minimum_size = Vector2(50, 25)
+		btn.custom_minimum_size = Vector2(60, 25)
 		btn.toggled.connect(func(pressed: bool) -> void:
 			if pressed:
 				selected_density = density
@@ -96,12 +95,13 @@ func _setup_ui() -> void:
 			btn.button_pressed = true
 
 	# Stream selector
-	var stream_container := HBoxContainer.new()
-	tile_section.add_child(stream_container)
-
 	var stream_label := Label.new()
 	stream_label.text = "Stream:"
-	stream_container.add_child(stream_label)
+	stream_label.add_theme_font_size_override("font_size", 9)
+	tile_section.add_child(stream_label)
+
+	var stream_container := HBoxContainer.new()
+	tile_section.add_child(stream_container)
 
 	for stream in ["", "north", "south", "east", "west"]:
 		var btn := Button.new()
@@ -118,7 +118,7 @@ func _setup_ui() -> void:
 
 	# Tools
 	var tool_section := VBoxContainer.new()
-	tool_section.custom_minimum_size = Vector2(150, 0)
+	tool_section.custom_minimum_size = Vector2(140, 0)
 	toolbar.add_child(tool_section)
 
 	var tool_title := Label.new()
@@ -138,7 +138,7 @@ func _setup_ui() -> void:
 
 	# File operations
 	var file_section := VBoxContainer.new()
-	file_section.custom_minimum_size = Vector2(150, 0)
+	file_section.custom_minimum_size = Vector2(140, 0)
 	toolbar.add_child(file_section)
 
 	var file_title := Label.new()
@@ -158,22 +158,22 @@ func _setup_ui() -> void:
 
 	# Back button
 	var back_section := VBoxContainer.new()
-	back_section.custom_minimum_size = Vector2(100, 0)
+	back_section.custom_minimum_size = Vector2(120, 0)
 	toolbar.add_child(back_section)
 
-	var back_spacer := Label.new()
-	back_section.add_child(back_spacer)
+	var back_title := Label.new()
+	back_title.text = "Menu"
+	back_title.add_theme_font_size_override("font_size", 10)
+	back_section.add_child(back_title)
 
 	var back_btn := Button.new()
-	back_btn.text = "← Back to Menu"
+	back_btn.text = "← Back"
 	back_btn.pressed.connect(_back_to_menu)
 	back_section.add_child(back_btn)
 
-	# Canvas area
-	canvas = Panel.new()
-	canvas.add_theme_stylebox_override("panel", StyleBoxFlat.new())
-	var canvas_bg := canvas.get_theme_stylebox("panel") as StyleBoxFlat
-	canvas_bg.bg_color = Color(0.2, 0.2, 0.2)
+	# Canvas area (custom control for drawing)
+	canvas = Control.new()
+	canvas.draw.connect(_on_canvas_draw)
 	canvas.gui_input.connect(_on_canvas_input)
 	main_container.add_child(canvas)
 
@@ -184,10 +184,12 @@ func _setup_ui() -> void:
 
 	tile_info_label = Label.new()
 	tile_info_label.text = "Selected: low"
+	tile_info_label.add_theme_font_size_override("font_size", 11)
 	status_container.add_child(tile_info_label)
 
 	status_label = Label.new()
 	status_label.text = "Ready"
+	status_label.add_theme_font_size_override("font_size", 11)
 	status_label.add_theme_color_override("font_color", Color.GREEN)
 	status_container.add_child(status_label)
 
@@ -198,18 +200,10 @@ func _init_grid() -> void:
 		for x in range(map_width):
 			row.append({"density": "low", "stream": ""})
 		grid.append(row)
-	_redraw_canvas()
+	if canvas:
+		canvas.queue_redraw()
 
-func _redraw_canvas() -> void:
-	if canvas == null:
-		return
-	canvas.queue_redraw()
-
-func _draw() -> void:
-	if canvas == null:
-		return
-	var draw_rect := Rect2(canvas.position, canvas.size)
-
+func _on_canvas_draw() -> void:
 	for y in range(map_height):
 		for x in range(map_width):
 			var cell = grid[y][x]
@@ -240,7 +234,7 @@ func _on_canvas_input(event: InputEvent) -> void:
 				_flood_fill(grid_x, grid_y)
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
 				_paint_single(grid_x, grid_y)
-			_redraw_canvas()
+			canvas.queue_redraw()
 
 func _paint_single(x: int, y: int) -> void:
 	if x >= 0 and x < map_width and y >= 0 and y < map_height:
@@ -289,7 +283,7 @@ func _fill_all() -> void:
 		for x in range(map_width):
 			grid[y][x]["density"] = selected_density
 			grid[y][x]["stream"] = selected_stream
-	_redraw_canvas()
+	canvas.queue_redraw()
 	status_label.text = "Filled entire map with %s" % selected_density
 	status_label.add_theme_color_override("font_color", Color.GREEN)
 

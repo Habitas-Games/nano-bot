@@ -34,9 +34,12 @@ func _build_ui() -> void:
 	var center := VBoxContainer.new()
 	center.set_anchors_preset(Control.PRESET_CENTER)
 	center.custom_minimum_size = Vector2(480, 0)
-	center.position            = Vector2(-240, -200)
+	center.position            = Vector2(-240, -250)
 	center.add_theme_constant_override("separation", 12)
 	add_child(center)
+
+	# Top spacing
+	center.add_child(_spacer(20))
 
 	# Title logo
 	var title := TextureRect.new()
