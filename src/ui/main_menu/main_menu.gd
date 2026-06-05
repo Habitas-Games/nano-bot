@@ -66,7 +66,7 @@ func _build_ui() -> void:
 	_map_dropdown = OptionButton.new()
 	_map_dropdown.custom_minimum_size = Vector2(0, 32)
 	for map_path in _available_maps:
-		var map_name := map_path.split("/")[-1].trim_suffix(".json")
+		var map_name: String = map_path.split("/")[-1].trim_suffix(".json")
 		_map_dropdown.add_item(map_name, 0)
 	center.add_child(_map_dropdown)
 
@@ -80,7 +80,7 @@ func _build_ui() -> void:
 	_strat_p0_dropdown = OptionButton.new()
 	_strat_p0_dropdown.custom_minimum_size = Vector2(0, 32)
 	for strat_path in _available_strategies:
-		var strat_name := strat_path.split("/")[-1].trim_suffix(".gd")
+		var strat_name: String = strat_path.split("/")[-1].trim_suffix(".gd")
 		_strat_p0_dropdown.add_item(strat_name, 0)
 	center.add_child(_strat_p0_dropdown)
 
@@ -93,7 +93,7 @@ func _build_ui() -> void:
 	_strat_p1_dropdown = OptionButton.new()
 	_strat_p1_dropdown.custom_minimum_size = Vector2(0, 32)
 	for strat_path in _available_strategies:
-		var strat_name := strat_path.split("/")[-1].trim_suffix(".gd")
+		var strat_name: String = strat_path.split("/")[-1].trim_suffix(".gd")
 		_strat_p1_dropdown.add_item(strat_name, 0)
 	center.add_child(_strat_p1_dropdown)
 
@@ -172,13 +172,13 @@ func _on_run_match() -> void:
 		_set_status("Error: need maps and strategies")
 		return
 
-	var selected_map_idx := _map_dropdown.get_selected_id()
-	var selected_p0_idx := _strat_p0_dropdown.get_selected_id()
-	var selected_p1_idx := _strat_p1_dropdown.get_selected_id()
+	var selected_map_idx: int = _map_dropdown.get_selected_id()
+	var selected_p0_idx: int = _strat_p0_dropdown.get_selected_id()
+	var selected_p1_idx: int = _strat_p1_dropdown.get_selected_id()
 
-	var map_path := _available_maps[selected_map_idx]
-	var strat_p0 := _available_strategies[selected_p0_idx]
-	var strat_p1 := _available_strategies[selected_p1_idx]
+	var map_path: String = _available_maps[selected_map_idx]
+	var strat_p0: String = _available_strategies[selected_p0_idx]
+	var strat_p1: String = _available_strategies[selected_p1_idx]
 
 	_set_status("Loading map…")
 	_run_btn.disabled  = true
@@ -236,10 +236,10 @@ func _set_status(text: String) -> void:
 		_status_label.text = text
 
 func _auto_replay_path() -> String:
-	var map_name := _available_maps[_map_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".json")
-	var strat_p0 := _available_strategies[_strat_p0_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".gd")
-	var strat_p1 := _available_strategies[_strat_p1_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".gd")
-	var stamp := Time.get_datetime_string_from_system().replace(":", "-").replace("T", "_")
+	var map_name: String = _available_maps[_map_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".json")
+	var strat_p0: String = _available_strategies[_strat_p0_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".gd")
+	var strat_p1: String = _available_strategies[_strat_p1_dropdown.get_selected_id()].split("/")[-1].trim_suffix(".gd")
+	var stamp: String = Time.get_datetime_string_from_system().replace(":", "-").replace("T", "_")
 	return "res://replays/match_%s_%s_vs_%s.json" % [stamp, strat_p0, strat_p1]
 
 static func _make_button(label: String, col: Color) -> Button:
