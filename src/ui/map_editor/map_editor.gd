@@ -289,14 +289,8 @@ func _load_map(path: String) -> void:
 		_show_error("Cannot open: " + path)
 		return
 
-	var json = JSON.new()
-	var error = json.parse(file.get_as_text())
-	if error != OK:
-		_show_error("Invalid JSON: " + path)
-		return
-
-	var data = json.data
-	if data == null or not data.is_dict():
+	var data = JSON.parse_string(file.get_as_text())
+	if data == null or typeof(data) != TYPE_DICTIONARY:
 		_show_error("Invalid map format")
 		return
 
