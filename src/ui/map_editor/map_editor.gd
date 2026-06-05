@@ -10,7 +10,6 @@ var map_height: int = DEFAULT_HEIGHT
 var grid: Array = []
 var selected_density: String = "low"
 
-var status_label: Label
 var zoom: float = 1.0
 var pan: Vector2 = Vector2.ZERO
 var is_panning: bool = false
@@ -26,7 +25,6 @@ func _ready() -> void:
 	_init_grid()
 
 func _load_sprites() -> void:
-	# Load sprite tiles for each density type
 	var sprite_paths = {
 		"low": "res://assets/tiles/tile_low.png",
 		"medium": "res://assets/tiles/tile_medium.png",
@@ -38,70 +36,107 @@ func _load_sprites() -> void:
 		var path = sprite_paths[density]
 		if ResourceLoader.exists(path):
 			sprites[density] = load(path)
-		else:
-			# Fallback: create a colored rectangle if sprite doesn't exist
-			sprites[density] = null
 
 func _setup_ui() -> void:
-	var main := VBoxContainer.new()
+	var main := HBoxContainer.new()
 	main.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(main)
 
-	# Toolbar
-	var toolbar := HBoxContainer.new()
-	toolbar.custom_minimum_size = Vector2(0, 50)
-	toolbar.add_theme_constant_override("separation", 10)
-	main.add_child(toolbar)
+	# LEFT PANEL
+	var panel := VBoxContainer.new()
+	panel.custom_minimum_size = Vector2(200, 0)
+	panel.add_theme_constant_override("separation", 8)
+	main.add_child(panel)
 
+	# Title
 	var title := Label.new()
-	title.text = "Tile:  "
-	title.add_theme_font_size_override("font_size", 12)
-	toolbar.add_child(title)
+	title.text = "Map Editor"
+	title.add_theme_font_size_override("font_size", 16)
+	panel.add_child(title)
+
+	panel.add_child(Label.new())  # Spacer
+
+	# Tile selector
+	var tile_title := Label.new()
+	tile_title.text = "Terrain:"
+	tile_title.add_theme_font_size_override("font_size", 12)
+	panel.add_child(tile_title)
+
+	var tile_container := VBoxContainer.new()
+	tile_container.add_theme_constant_override("separation", 4)
+	panel.add_child(tile_container)
 
 	for dens in ["low", "medium", "high", "bone"]:
 		var btn := Button.new()
-		btn.text = dens
-		btn.custom_minimum_size = Vector2(70, 30)
+		btn.custom_minimum_size = Vector2(0, 40)
+		btn.text = "  " + dens.to_upper()
 		btn.toggle_mode = true
 		btn.pressed.connect(func():
 			selected_density = dens
 		)
-		toolbar.add_child(btn)
+		tile_container.add_child(btn)
 		if dens == "low":
 			btn.button_pressed = true
 
-	toolbar.add_child(Control.new())  # Spacer
+	panel.add_child(Label.new())  # Spacer
+
+	# Tools section
+	var tools_title := Label.new()
+	tools_title.text = "Tools:"
+	tools_title.add_theme_font_size_override("font_size", 12)
+	panel.add_child(tools_title)
+
+	var tools_container := VBoxContainer.new()
+	tools_container.add_theme_constant_override("separation", 4)
+	panel.add_child(tools_container)
 
 	var load_btn := Button.new()
-	load_btn.text = "Load Map"
+	load_btn.text = "📂 Load Map"
+	load_btn.custom_minimum_size = Vector2(0, 32)
 	load_btn.pressed.connect(_load_map)
-	toolbar.add_child(load_btn)
+	tools_container.add_child(load_btn)
 
 	var clear_btn := Button.new()
-	clear_btn.text = "Clear"
+	clear_btn.text = "🗑️  Clear"
+	clear_btn.custom_minimum_size = Vector2(0, 32)
 	clear_btn.pressed.connect(_clear_map)
-	toolbar.add_child(clear_btn)
+	tools_container.add_child(clear_btn)
 
 	var border_btn := Button.new()
-	border_btn.text = "Add Border"
+	border_btn.text = "⬜ Add Border"
+	border_btn.custom_minimum_size = Vector2(0, 32)
 	border_btn.pressed.connect(_add_border)
-	toolbar.add_child(border_btn)
+	tools_container.add_child(border_btn)
 
 	var save_btn := Button.new()
-	save_btn.text = "Save Map"
+	save_btn.text = "💾 Save Map"
+	save_btn.custom_minimum_size = Vector2(0, 32)
 	save_btn.pressed.connect(_save_map)
-	toolbar.add_child(save_btn)
+	tools_container.add_child(save_btn)
+
+	panel.add_child(Label.new())  # Spacer
 
 	var back_btn := Button.new()
-	back_btn.text = "← Back"
+	back_btn.text = "← Back to Menu"
+	back_btn.custom_minimum_size = Vector2(0, 32)
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
-	toolbar.add_child(back_btn)
+	panel.add_child(back_btn)
 
-	# Status
-	status_label = Label.new()
-	status_label.text = "Click to paint | Right-click to fill | Scroll to zoom | Middle-click to drag"
-	status_label.add_theme_font_size_override("font_size", 10)
-	main.add_child(status_label)
+	panel.add_child(Control.new())  # Fill rest
+
+	# RIGHT SIDE - Canvas + Status
+	var canvas_section := VBoxContainer.new()
+	main.add_child(canvas_section)
+
+	# Status bar
+	var status_container := HBoxContainer.new()
+	status_container.custom_minimum_size = Vector2(0, 30)
+	canvas_section.add_child(status_container)
+
+	var status_label_left := Label.new()
+	status_label_left.text = "Click & drag to paint | Right-click to fill | Scroll to zoom | Middle-click to pan"
+	status_label_left.add_theme_font_size_override("font_size", 10)
+	status_container.add_child(status_label_left)
 
 func _init_grid() -> void:
 	grid.clear()
@@ -112,7 +147,6 @@ func _init_grid() -> void:
 		grid.append(row)
 
 func _input(event: InputEvent) -> void:
-	# Zoom with mouse wheel
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.2, 3.0)
@@ -132,7 +166,6 @@ func _input(event: InputEvent) -> void:
 			is_panning = false
 			return
 
-	# Pan with middle mouse button
 	if event is InputEventMouseMotion and is_panning:
 		var delta = get_local_mouse_position() - pan_start
 		pan += delta
@@ -140,14 +173,12 @@ func _input(event: InputEvent) -> void:
 		queue_redraw()
 		return
 
-	# Continuous painting with mouse motion
 	if event is InputEventMouseMotion and is_painting:
 		_paint_line(last_painted_pos, event.position)
 		last_painted_pos = event.position
 		queue_redraw()
 		return
 
-	# Paint tiles
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -158,30 +189,27 @@ func _input(event: InputEvent) -> void:
 			else:
 				is_painting = false
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			var local_pos = get_local_mouse_position() - Vector2(0, 50)
+			var local_pos = get_local_mouse_position() - Vector2(200, 30)
 			var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
 			var x = int(grid_pos.x)
 			var y = int(grid_pos.y)
 
 			if x >= 0 and x < map_width and y >= 0 and y < map_height:
 				_flood_fill(x, y, grid[y][x])
-				status_label.text = "Filled with: %s | Zoom: %.1fx" % [selected_density, zoom]
 				queue_redraw()
 
 func _paint_at(screen_pos: Vector2) -> void:
-	var local_pos = screen_pos - Vector2(0, 50)
+	var local_pos = screen_pos - Vector2(200, 30)
 	var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
 	var x = int(grid_pos.x)
 	var y = int(grid_pos.y)
 
 	if x >= 0 and x < map_width and y >= 0 and y < map_height:
 		grid[y][x] = selected_density
-		status_label.text = "Painting: %s | Zoom: %.1fx" % [selected_density, zoom]
 
 func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
-	# Bresenham-like line painting between two points
-	var start_local = from_pos - Vector2(0, 50)
-	var end_local = to_pos - Vector2(0, 50)
+	var start_local = from_pos - Vector2(200, 30)
+	var end_local = to_pos - Vector2(200, 30)
 
 	var start_grid = (start_local - pan) / (TILE_SIZE * zoom)
 	var end_grid = (end_local - pan) / (TILE_SIZE * zoom)
@@ -191,7 +219,6 @@ func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
 	var x1 = int(end_grid.x)
 	var y1 = int(end_grid.y)
 
-	# Bresenham's line algorithm
 	var dx = abs(x1 - x0)
 	var dy = abs(y1 - y0)
 	var sx = 1 if x1 > x0 else -1
@@ -248,7 +275,6 @@ func _flood_fill(start_x: int, start_y: int, target: String) -> void:
 func _clear_map() -> void:
 	_init_grid()
 	queue_redraw()
-	status_label.text = "Map cleared"
 
 func _add_border() -> void:
 	for x in range(map_width):
@@ -258,12 +284,10 @@ func _add_border() -> void:
 		grid[y][0] = "bone"
 		grid[y][map_width - 1] = "bone"
 	queue_redraw()
-	status_label.text = "Border added"
 
 func _load_map() -> void:
 	var dir = DirAccess.open("res://maps/")
 	if dir == null:
-		status_label.text = "Could not open maps directory"
 		return
 
 	var files = []
@@ -275,10 +299,8 @@ func _load_map() -> void:
 		file_name = dir.get_next()
 
 	if files.is_empty():
-		status_label.text = "No maps found"
 		return
 
-	# Load the first available map (in a real version, you'd show a dialog)
 	var map_path = "res://maps/" + files[0]
 	var file = FileAccess.open(map_path, FileAccess.READ)
 	var data = JSON.parse_string(file.get_as_text())
@@ -296,7 +318,6 @@ func _load_map() -> void:
 					grid[y][x] = cell.get("density", "low")
 
 		queue_redraw()
-		status_label.text = "Loaded: %s (%dx%d)" % [files[0], map_width, map_height]
 
 func _save_map() -> void:
 	var cells: Array = []
@@ -327,15 +348,13 @@ func _save_map() -> void:
 
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
-	status_label.text = "✓ Saved to user://custom_map.json"
 
 func _draw() -> void:
-	# Draw grid with sprites or colors
+	# Draw grid with sprites
 	for y in range(map_height):
 		for x in range(map_width):
-			var screen_pos = pan + Vector2(x, y) * TILE_SIZE * zoom
+			var screen_pos = Vector2(200, 30) + pan + Vector2(x, y) * TILE_SIZE * zoom
 			var screen_size = TILE_SIZE * zoom
-			var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
 
 			var density = grid[y][x]
 			var color = Color.WHITE
@@ -350,13 +369,13 @@ func _draw() -> void:
 				"bone":
 					color = Color(0.2, 0.2, 0.2)
 
-			# Draw sprite if available, otherwise colored rectangle
 			if sprites.get(density) != null:
 				draw_set_transform(screen_pos, 0, Vector2(zoom, zoom))
 				draw_texture(sprites[density], Vector2.ZERO)
 				draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 			else:
+				var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
 				draw_rect(rect, color)
 
-			# Draw grid outline
+			var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
 			draw_rect(rect, Color.GRAY, false, 1.0)
