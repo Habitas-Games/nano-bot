@@ -1,7 +1,8 @@
 # v0.0.2 — Map Editor Implementation Plan
 
-**Status:** Plan (based on corrected analysis)
+**Status:** Phase 1 Complete, Phase 2 Ready
 **Reference:** [analysis.md](./analysis.md)
+**Implementation:** [map_editor.gd](../../src/ui/map_editor/map_editor.gd)
 
 ---
 
@@ -112,29 +113,124 @@ Elements:
 
 **Goal:** Paint terrain while keeping streams intact
 
-**Features:**
-1. Left-click to paint single cell
-2. Left-click drag to paint continuous path
-3. Right-click to flood-fill connected region
-4. Tool selector: choose density (LOW/MEDIUM/HIGH/BONE)
+**Foundation (from Phase 1):**
+- Canvas rendering working correctly
+- Proper coordinate math established
+- Input handling via `_input()` override
+- Correct data model (cells with density + stream_dir)
+
+**Features to Add:**
+1. Density selector UI (right panel buttons)
+2. Left-click to paint single cell
+3. Left-click drag to paint continuous path
+4. Right-click to flood-fill connected region
 5. Clear map button
 6. Add border button
 7. CRITICAL: When painting, only change density, NOT stream_dir
 
+**Implementation Details:**
+
+**1. UI Changes:**
+- Add density selector buttons in right panel (already in Phase 1 plan but not implemented)
+- Track `selected_density` variable
+- Show which density is selected (button highlight)
+
+**2. Click Detection:**
+```gdscript
+func _input(event: InputEvent) -> void:
+  if event is InputEventMouseButton and event.pressed:
+    var local_pos = event.position
+    if _is_in_canvas(local_pos):
+      var grid_x = int((local_pos.x - canvas_rect.position.x + scroll_x) / (CELL_SIZE * zoom))
+      var grid_y = int((local_pos.y - canvas_rect.position.y + scroll_y) / (CELL_SIZE * zoom))
+      
+      if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+        if event.button_index == MOUSE_BUTTON_LEFT:
+          _paint_cell(grid_x, grid_y)
+        elif event.button_index == MOUSE_BUTTON_RIGHT:
+          _flood_fill(grid_x, grid_y)
+```
+
+**3. Paint Single Cell:**
+```gdscript
+func _paint_cell(x: int, y: int) -> void:
+  var idx = y * map_width + x
+  cells[idx]["density"] = selected_density
+  # stream_dir unchanged
+  queue_redraw()
+```
+
+**4. Drag Painting:**
+- Track `is_painting` flag on LEFT button press
+- On mouse motion, paint cells along path
+- Use Bresenham or simple line algorithm
+- Release clears flag
+
+**5. Flood Fill:**
+```gdscript
+func _flood_fill(start_x: int, start_y: int) -> void:
+  var target_density = cells[start_y * map_width + start_x]["density"]
+  var stack = [[start_x, start_y]]
+  var visited = {}
+  
+  while stack.size() > 0:
+    var pos = stack.pop_back()
+    var x = pos[0]
+    var y = pos[1]
+    
+    if [x, y] in visited: continue
+    if x < 0 or x >= map_width or y < 0 or y >= map_height: continue
+    if cells[y * map_width + x]["density"] != target_density: continue
+    
+    visited[[x, y]] = true
+    cells[y * map_width + x]["density"] = selected_density
+    
+    stack.append([x + 1, y])
+    stack.append([x - 1, y])
+    stack.append([x, y + 1])
+    stack.append([x, y - 1])
+  
+  queue_redraw()
+```
+
+**6. Clear and Border:**
+```gdscript
+func _clear_map() -> void:
+  for i in range(cells.size()):
+    cells[i]["density"] = Density.LOW
+    # stream_dir unchanged
+  queue_redraw()
+
+func _add_border() -> void:
+  # Set edges to BONE
+  for x in range(map_width):
+    cells[0 * map_width + x]["density"] = Density.BONE
+    cells[(map_height - 1) * map_width + x]["density"] = Density.BONE
+  for y in range(map_height):
+    cells[y * map_width + 0]["density"] = Density.BONE
+    cells[y * map_width + (map_width - 1)]["density"] = Density.BONE
+  queue_redraw()
+```
+
 **Deliverables:**
 - Can select density from UI
 - Painting changes only density, preserves streams
+- Drag painting creates continuous path
 - Flood-fill works on connected density regions
-- Clear resets all to LOW/NONE
+- Clear resets terrain to LOW (streams preserved)
 - Border adds BONE cells around edge
+- Streams visible through paint operations
 
-**Time:** 4-5 hours
+**Time:** 3-4 hours
 
 **Tests:**
 - Paint cell, verify density changed but stream_dir unchanged
-- Flood-fill, verify all connected same-density cells change
+- Drag paint 10+ cells in line, verify continuous
+- Flood-fill region, verify all connected same-density cells change
 - Paint over stream cell, verify arrow still shows
-- Save/load, verify stream preserved
+- Click each density, verify button highlight changes
+- Clear, verify all cells become LOW with streams intact
+- Add border, verify edges are BONE
 
 ---
 
@@ -473,24 +569,38 @@ StreamDir.WEST → "west"
 
 ---
 
-## 9. Timeline
+## 9. Timeline and Status
 
-| Phase | Hours | Note |
-|-------|-------|------|
-| Phase 1 | 6-8 | Critical: rendering must be exact |
-| Phase 2 | 4-5 | Core editing feature |
-| Phase 3 | 3-4 | Stream placement |
-| Phase 4 | 4-5 | Element placement |
-| Phase 5 | 3-4 | File I/O |
-| Phase 6 | 2-3 | Polish |
-| **Total** | **22-29 hours** | |
+| Phase | Hours | Status | Notes |
+|-------|-------|--------|-------|
+| Phase 1 | 6-8 | ✅ **COMPLETE** | Rendering, zoom, pan working |
+| Phase 2 | 3-4 | 🔄 **NEXT** | Paint, fill, clear, border |
+| Phase 3 | 3-4 | 📋 Planned | Stream placement |
+| Phase 4 | 4-5 | 📋 Planned | Element placement |
+| Phase 5 | 3-4 | 📋 Planned | File I/O (save/load) |
+| Phase 6 | 2-3 | 📋 Planned | Undo/history/polish |
+| **Total** | **22-29 hours** | | Estimated from start |
+
+**Remaining (Phase 2-6):** ~16-21 hours
 
 ---
 
-## 10. Start Condition
+## 10. Status Summary
 
-✅ Analysis complete and based on simulator code review
-✅ Data model correct (stream as cell property)
-✅ Rendering algorithm documented (stream texture + arrow)
-✅ JSON format specified
-✅ Ready to implement Phase 1
+**Phase 1 ✅ COMPLETE:**
+- ✅ Analysis complete and verified against simulator
+- ✅ Data model correct (stream as cell property)
+- ✅ Rendering working (stream texture + arrow overlay)
+- ✅ Maps load correctly from JSON
+- ✅ Zoom/pan controls working
+- ✅ All textures loading
+- ✅ All enums correct (Density, StreamDir as integers)
+
+**Phase 2 🔄 READY TO START:**
+- ✅ UI foundation in place
+- ✅ Input handling infrastructure ready
+- ✅ Coordinate math verified
+- ✅ Data model stable
+- ✅ Phase 2 implementation plan specified with code examples
+
+**Next Step:** Implement Phase 2 (terrain editing)
