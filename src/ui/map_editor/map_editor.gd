@@ -10,12 +10,12 @@ var map_height: int = DEFAULT_HEIGHT
 var grid: Array = []
 var selected_density: String = "low"
 var zoom: float = 1.0
-var is_painting: bool = false
 var scroll_x: int = 0
 var scroll_y: int = 0
 
 var sprites: Dictionary = {}
 var terrain_buttons: Dictionary = {}
+var stream_direction_buttons: Dictionary = {}
 var history: Array = []
 var history_index: int = -1
 const MAX_HISTORY: int = 50
@@ -29,10 +29,14 @@ var injection_zones: Array = []
 var bloodstreams: Array = []
 
 # Editor mode
-var editor_mode: String = "terrain"  # "terrain", "habitas", "azn", "injection", "stream"
+var editor_mode: String = "terrain"
 var mode_buttons: Dictionary = {}
-var selected_stream_direction: String = "north"  # "north", "south", "east", "west", "ns", "ew"
-var stream_direction_buttons: Dictionary = {}
+var selected_stream_direction: String = "north"
+
+# Injection zone editing
+var editing_injection_zone: bool = false
+var injection_zone_start: Vector2 = Vector2.ZERO
+var temp_injection_zone: Dictionary = {}
 
 func _ready() -> void:
 	_load_sprites()
@@ -64,19 +68,45 @@ func _setup_ui() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
 
-	# LEFT PANEL - Scrollable
-	var panel_bg := PanelContainer.new()
-	panel_bg.custom_minimum_size = Vector2(220, 0)
-	root.add_child(panel_bg)
+	# LEFT SIDE - Canvas and scrollbars
+	var left := VBoxContainer.new()
+	root.add_child(left)
+
+	# Status bar
+	var status := Label.new()
+	status.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom | Middle-click to pan"
+	status.add_theme_font_size_override("font_size", 10)
+	left.add_child(status)
+
+	# Canvas area
+	var canvas_wrapper := Control.new()
+	canvas_wrapper.custom_minimum_size = Vector2(800, 600)
+	canvas_wrapper.draw.connect(_on_canvas_draw)
+	canvas_wrapper.gui_input.connect(_on_canvas_input)
+	left.add_child(canvas_wrapper)
+
+	# Store canvas reference
+	var canvas = canvas_wrapper
+
+	# Horizontal scrollbar
+	var h_scroll := HScrollBar.new()
+	h_scroll.custom_minimum_size = Vector2(0, 15)
+	h_scroll.value_changed.connect(func(v): scroll_x = int(v); canvas.queue_redraw())
+	left.add_child(h_scroll)
+
+	# RIGHT SIDE - Control panel (like simulator)
+	var right := PanelContainer.new()
+	right.custom_minimum_size = Vector2(250, 0)
+	root.add_child(right)
 
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.15, 0.15, 0.15)
-	panel_bg.add_theme_stylebox_override("panel", panel_style)
+	right.add_theme_stylebox_override("panel", panel_style)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	panel_bg.add_child(scroll)
+	right.add_child(scroll)
 
 	var panel := VBoxContainer.new()
 	panel.add_theme_constant_override("separation", 10)
@@ -84,7 +114,7 @@ func _setup_ui() -> void:
 
 	var title := Label.new()
 	title.text = "Map Editor"
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
 
 	# Terrain section
@@ -95,19 +125,18 @@ func _setup_ui() -> void:
 
 	for dens in ["low", "medium", "high", "bone"]:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(0, 50)
+		btn.custom_minimum_size = Vector2(0, 40)
 		btn.text = "  " + dens.to_upper()
 		btn.toggle_mode = true
 		if sprites.get(dens):
 			btn.icon = sprites[dens]
 		var dens_copy = dens
-		btn.pressed.connect(func(): _select_density(dens_copy))
+		btn.pressed.connect(func(): _set_editor_mode("terrain"); selected_density = dens_copy)
 		panel.add_child(btn)
 		terrain_buttons[dens] = btn
 		if dens == "low":
 			btn.button_pressed = true
 
-	# Add Border button
 	var border_btn := Button.new()
 	border_btn.text = "⬜ Add Border"
 	border_btn.custom_minimum_size = Vector2(0, 40)
@@ -116,14 +145,13 @@ func _setup_ui() -> void:
 
 	panel.add_child(HSeparator.new())
 
-	# Element editor modes
+	# Elements section
 	var elements_label := Label.new()
 	elements_label.text = "Elements"
 	elements_label.add_theme_font_size_override("font_size", 13)
 	panel.add_child(elements_label)
 
 	var modes = [
-		{"name": "terrain", "text": "🟫 Terrain"},
 		{"name": "habitas", "text": "🔴 Habitas Points"},
 		{"name": "azn", "text": "🟡 AZN Nodes"},
 		{"name": "injection", "text": "🟢 Injection Zones"},
@@ -139,10 +167,8 @@ func _setup_ui() -> void:
 		mode_btn.pressed.connect(func(): _set_editor_mode(mode_name))
 		panel.add_child(mode_btn)
 		mode_buttons[mode_name] = mode_btn
-		if mode_name == "terrain":
-			mode_btn.button_pressed = true
 
-	# Stream direction selector
+	# Stream direction selector (hidden by default)
 	var stream_label := Label.new()
 	stream_label.text = "Stream Direction"
 	stream_label.add_theme_font_size_override("font_size", 11)
@@ -206,26 +232,10 @@ func _setup_ui() -> void:
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
 	panel.add_child(back_btn)
 
-	# RIGHT SIDE with status
-	var right := VBoxContainer.new()
-	root.add_child(right)
-
-	var status := Label.new()
-	status.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom | Drag scrollbars to pan"
-	status.add_theme_font_size_override("font_size", 10)
-	right.add_child(status)
-
-func _select_density(dens: String) -> void:
-	selected_density = dens
-	for d in terrain_buttons.keys():
-		terrain_buttons[d].button_pressed = (d == dens)
-
 func _set_editor_mode(mode: String) -> void:
 	editor_mode = mode
 	for m in mode_buttons.keys():
 		mode_buttons[m].button_pressed = (m == mode)
-
-	# Show/hide stream direction buttons
 	var show_stream = (mode == "stream")
 	for btn in stream_direction_buttons.values():
 		btn.visible = show_stream
@@ -235,11 +245,11 @@ func _set_stream_direction(direction: String) -> void:
 	for d in stream_direction_buttons.keys():
 		stream_direction_buttons[d].button_pressed = (d == direction)
 
-func _draw() -> void:
-	var start_x = 220
-	var start_y = 30
-	var canvas_width = get_size().x - 220 - scrollbar_width
-	var canvas_height = get_size().y - 30 - scrollbar_height
+func _on_canvas_draw() -> void:
+	var start_x = 0
+	var start_y = 0
+	var canvas_width = get_size().x - 250 - scrollbar_width
+	var canvas_height = get_size().y - 45 - scrollbar_height
 
 	# Draw background
 	draw_rect(Rect2(start_x, start_y, canvas_width, canvas_height), Color(0.2, 0.2, 0.2))
@@ -251,7 +261,6 @@ func _draw() -> void:
 			var screen_y = start_y + (y * TILE_SIZE * zoom) - scroll_y
 			var size = TILE_SIZE * zoom
 
-			# Skip if off-screen
 			if screen_x + size < start_x or screen_x > start_x + canvas_width:
 				continue
 			if screen_y + size < start_y or screen_y > start_y + canvas_height:
@@ -260,54 +269,18 @@ func _draw() -> void:
 			var density = grid[y][x]
 			var color = Color.WHITE
 
-			# Check if this cell has a bloodstream
-			var has_stream = false
-			var stream_direction = ""
-			for stream in bloodstreams:
-				if stream["x"] == x and stream["y"] == y:
-					has_stream = true
-					stream_direction = stream["stream"]
-					break
+			match density:
+				"low": color = Color(0.8, 0.6, 0.6)
+				"medium": color = Color(0.7, 0.5, 0.7)
+				"high": color = Color(0.5, 0.2, 0.5)
+				"bone": color = Color(0.2, 0.2, 0.2)
 
-			# Use cyan for bloodstream cells, otherwise use density color
-			if has_stream:
-				color = Color(0.0, 1.0, 1.0, 0.7)  # Cyan for streams
-			else:
-				match density:
-					"low": color = Color(0.8, 0.6, 0.6)
-					"medium": color = Color(0.7, 0.5, 0.7)
-					"high": color = Color(0.5, 0.2, 0.5)
-					"bone": color = Color(0.2, 0.2, 0.2)
-
-			if sprites.get(density) and not has_stream:
+			if sprites.get(density):
 				draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
 			else:
 				draw_rect(Rect2(screen_x, screen_y, size, size), color)
 
-			# Draw grid outline
 			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
-
-			# Draw direction arrow on bloodstream cells
-			if has_stream:
-				var center_x = screen_x + size / 2
-				var center_y = screen_y + size / 2
-				var arrow_size = 4 * zoom
-				var arrow_color = Color.WHITE
-				match stream_direction:
-					"north":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y - arrow_size), arrow_color, 2)
-					"south":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y + arrow_size), arrow_color, 2)
-					"east":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x + arrow_size, center_y), arrow_color, 2)
-					"west":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x - arrow_size, center_y), arrow_color, 2)
-					"ns":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y - arrow_size), arrow_color, 2)
-						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y + arrow_size), arrow_color, 2)
-					"ew":
-						draw_line(Vector2(center_x, center_y), Vector2(center_x - arrow_size, center_y), arrow_color, 2)
-						draw_line(Vector2(center_x, center_y), Vector2(center_x + arrow_size, center_y), arrow_color, 2)
 
 	# Draw injection zones
 	for zone in injection_zones:
@@ -322,148 +295,91 @@ func _draw() -> void:
 		var zone_color = Color(0, 1, 0, 0.2) if zone["player"] == 0 else Color(1, 0, 0, 0.2)
 		draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), zone_color)
 
-	# Draw habitas points
+	# Draw habitas points (red circles)
 	for point in habitas_points:
 		var screen_x = start_x + (point["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
 		var screen_y = start_y + (point["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
-		var radius = 5 * zoom
-		draw_circle(Vector2(screen_x, screen_y), radius, Color.RED)
+		draw_circle(Vector2(screen_x, screen_y), 5 * zoom, Color.RED)
 
-	# Draw AZN nodes
+	# Draw AZN nodes (yellow circles)
 	for node in azn_nodes:
 		var screen_x = start_x + (node["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
 		var screen_y = start_y + (node["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
-		var radius = 4 * zoom
-		draw_circle(Vector2(screen_x, screen_y), radius, Color.YELLOW)
+		draw_circle(Vector2(screen_x, screen_y), 4 * zoom, Color.YELLOW)
 
-	# Draw scrollbars
-	var total_width = int(map_width * TILE_SIZE * zoom)
-	var total_height = int(map_height * TILE_SIZE * zoom)
+	# Draw bloodstreams as ARROWS ONLY (no full tile background)
+	for stream in bloodstreams:
+		var screen_x = start_x + (stream["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
+		var screen_y = start_y + (stream["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
+		var arrow_size = 6 * zoom
+		var direction = stream.get("stream", "")
+		var arrow_color = Color.LIGHT_CORAL
+		match direction:
+			"north":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, 2)
+			"south":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, 2)
+			"east":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, 2)
+			"west":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, 2)
 
-	# Horizontal scrollbar background
-	draw_rect(Rect2(start_x, start_y + canvas_height, canvas_width, scrollbar_height), Color(0.15, 0.15, 0.15))
+func _on_canvas_input(event: InputEvent) -> void:
+	var start_x = 0
+	var start_y = 0
+	var canvas_width = get_size().x - 250 - scrollbar_width
+	var canvas_height = get_size().y - 45 - scrollbar_height
 
-	# Horizontal scrollbar thumb
-	if total_width > canvas_width:
-		var thumb_width = max(20, int(canvas_width * canvas_width / total_width))
-		var thumb_x = start_x + int(scroll_x * canvas_width / total_width)
-		draw_rect(Rect2(thumb_x, start_y + canvas_height, thumb_width, scrollbar_height), Color(0.5, 0.5, 0.5))
-
-	# Vertical scrollbar background
-	draw_rect(Rect2(start_x + canvas_width, start_y, scrollbar_width, canvas_height), Color(0.15, 0.15, 0.15))
-
-	# Vertical scrollbar thumb
-	if total_height > canvas_height:
-		var thumb_height = max(20, int(canvas_height * canvas_height / total_height))
-		var thumb_y = start_y + int(scroll_y * canvas_height / total_height)
-		draw_rect(Rect2(start_x + canvas_width, thumb_y, scrollbar_width, thumb_height), Color(0.5, 0.5, 0.5))
-
-func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.1, 3.0)
-			_update_scrollbars()
 			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = max(zoom - 0.1, 0.5)
-			_update_scrollbars()
 			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 
-	var start_x = 220
-	var start_y = 30
-	var canvas_width = get_size().x - 220 - scrollbar_width
-	var canvas_height = get_size().y - 30 - scrollbar_height
-
 	if event is InputEventMouseButton and event.pressed:
 		var local_pos = event.position
-
-		# Check if clicking on horizontal scrollbar
-		if local_pos.y >= start_y + canvas_height and local_pos.y < start_y + canvas_height + scrollbar_height:
-			if local_pos.x >= start_x and local_pos.x < start_x + canvas_width:
-				var total_width = int(map_width * TILE_SIZE * zoom)
-				scroll_x = int((local_pos.x - start_x) * total_width / canvas_width)
-				scroll_x = clampi(scroll_x, 0, max(0, total_width - canvas_width))
-				queue_redraw()
-				return
-
-		# Check if clicking on vertical scrollbar
-		if local_pos.x >= start_x + canvas_width and local_pos.x < start_x + canvas_width + scrollbar_width:
-			if local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
-				var total_height = int(map_height * TILE_SIZE * zoom)
-				scroll_y = int((local_pos.y - start_y) * total_height / canvas_height)
-				scroll_y = clampi(scroll_y, 0, max(0, total_height - canvas_height))
-				queue_redraw()
-				return
-
-		# Normal canvas interaction
-		if local_pos.x >= start_x and local_pos.x < start_x + canvas_width and local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
-			var grid_x = int((local_pos.x - start_x + scroll_x) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - start_y + scroll_y) / (TILE_SIZE * zoom))
+		if local_pos.x < canvas_width and local_pos.y > 45 and local_pos.y < 45 + canvas_height:
+			var grid_x = int((local_pos.x + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - 45 + scroll_y) / (TILE_SIZE * zoom))
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				_save_state()
 				if editor_mode == "terrain":
 					if event.button_index == MOUSE_BUTTON_LEFT:
-						_save_state()
-						is_painting = true
 						grid[grid_y][grid_x] = selected_density
-						queue_redraw()
 					elif event.button_index == MOUSE_BUTTON_RIGHT:
-						_save_state()
 						_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
-						queue_redraw()
 				elif editor_mode == "habitas" and event.button_index == MOUSE_BUTTON_LEFT:
-					_save_state()
 					habitas_points.append({"x": grid_x, "y": grid_y})
-					queue_redraw()
 				elif editor_mode == "azn" and event.button_index == MOUSE_BUTTON_LEFT:
-					_save_state()
 					azn_nodes.append({"x": grid_x, "y": grid_y, "quantity": 30})
-					queue_redraw()
 				elif editor_mode == "stream" and event.button_index == MOUSE_BUTTON_LEFT:
-					_save_state()
-					# Remove any existing stream at this location
-					bloodstreams = bloodstreams.filter(func(s): return s["x"] != grid_x or s["y"] != grid_y)
 					bloodstreams.append({"x": grid_x, "y": grid_y, "stream": selected_stream_direction})
-					grid[grid_y][grid_x] = "medium"  # Bloodstreams are medium density
-					queue_redraw()
+					grid[grid_y][grid_x] = "medium"
+				elif editor_mode == "injection" and event.button_index == MOUSE_BUTTON_LEFT:
+					if not editing_injection_zone:
+						editing_injection_zone = true
+						injection_zone_start = Vector2(grid_x, grid_y)
+				queue_redraw()
 
 	if event is InputEventMouseButton and not event.pressed:
-		is_painting = false
-
-	if event is InputEventMouseMotion and is_painting:
-		var local_pos = event.position
-		if local_pos.x >= start_x and local_pos.x < start_x + canvas_width and local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
-			var grid_x = int((local_pos.x - start_x + scroll_x) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - start_y + scroll_y) / (TILE_SIZE * zoom))
-
-			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-				grid[grid_y][grid_x] = selected_density
-				queue_redraw()
-
-	# Arrow keys for scrolling
-	if event is InputEventKey and event.pressed:
-		var scroll_speed = 20
-		match event.keycode:
-			KEY_LEFT:
-				scroll_x = max(0, scroll_x - scroll_speed)
-				queue_redraw()
-				get_tree().root.set_input_as_handled()
-			KEY_RIGHT:
-				scroll_x = min(int(map_width * TILE_SIZE * zoom - (get_size().x - 220)), scroll_x + scroll_speed)
-				queue_redraw()
-				get_tree().root.set_input_as_handled()
-			KEY_UP:
-				scroll_y = max(0, scroll_y - scroll_speed)
-				queue_redraw()
-				get_tree().root.set_input_as_handled()
-			KEY_DOWN:
-				scroll_y = min(int(map_height * TILE_SIZE * zoom - (get_size().y - 30)), scroll_y + scroll_speed)
-				queue_redraw()
-				get_tree().root.set_input_as_handled()
+		if editor_mode == "injection" and editing_injection_zone:
+			var local_pos = event.position
+			var grid_x = int((local_pos.x + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - 45 + scroll_y) / (TILE_SIZE * zoom))
+			var x1 = min(int(injection_zone_start.x), grid_x)
+			var x2 = max(int(injection_zone_start.x), grid_x)
+			var y1 = min(int(injection_zone_start.y), grid_y)
+			var y2 = max(int(injection_zone_start.y), grid_y)
+			injection_zones.append({"player": 0, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
+			editing_injection_zone = false
+			queue_redraw()
 
 func _clear_map() -> void:
 	_save_state()
@@ -495,7 +411,6 @@ func _show_load_dialog() -> void:
 	if files.is_empty():
 		return
 
-	# Create a simple popup menu
 	var popup := PopupMenu.new()
 	add_child(popup)
 
@@ -533,27 +448,22 @@ func _load_map(filename: String) -> void:
 		map_height = data.get("height", DEFAULT_HEIGHT)
 		_init_grid()
 
-		# Load terrain and bloodstreams
 		bloodstreams.clear()
 		for cell in data.get("cells", []):
 			if "x" in cell and "y" in cell and cell["x"] < map_width and cell["y"] < map_height:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
-				# If cell has a stream, it's a bloodstream
 				if cell.get("stream"):
 					bloodstreams.append({"x": cell["x"], "y": cell["y"], "stream": cell["stream"]})
 
-		# Load other elements
 		habitas_points = data.get("habitas_points", []).duplicate()
 		azn_nodes = data.get("azn_nodes", []).duplicate()
 		injection_zones = data.get("injection_zones", []).duplicate()
 
 		scroll_x = 0
 		scroll_y = 0
-		# Reset history for new map
 		history.clear()
 		history_index = -1
-		_save_state()  # Save initial state
-		_update_scrollbars()
+		_save_state()
 		queue_redraw()
 
 func _save_map() -> void:
@@ -562,7 +472,6 @@ func _save_map() -> void:
 		for x in range(map_width):
 			if grid[y][x] != "low":
 				var cell_data = {"x": x, "y": y, "density": grid[y][x]}
-				# Add bloodstream if exists
 				for stream in bloodstreams:
 					if stream["x"] == x and stream["y"] == y:
 						cell_data["stream"] = stream.get("stream", "")
@@ -583,24 +492,14 @@ func _save_map() -> void:
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
 
-func _update_scrollbars() -> void:
-	# Scrollbar ranges are calculated in _draw and input handling
-	pass
-
 func _save_state() -> void:
-	# Remove any states after current index (if we undid and made new changes)
 	if history_index < history.size() - 1:
 		history.resize(history_index + 1)
-
-	# Save current grid state
 	var state = []
 	for row in grid:
 		state.append(row.duplicate())
-
 	history.append(state)
 	history_index = history.size() - 1
-
-	# Limit history size
 	if history.size() > MAX_HISTORY:
 		history.pop_front()
 		history_index -= 1
@@ -608,7 +507,6 @@ func _save_state() -> void:
 func _undo() -> void:
 	if history_index > 0:
 		history_index -= 1
-		# Restore grid from history
 		grid.clear()
 		for row in history[history_index]:
 			grid.append(row.duplicate())
