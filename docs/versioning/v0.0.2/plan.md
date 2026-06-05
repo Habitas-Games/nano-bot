@@ -1,434 +1,496 @@
 # v0.0.2 — Map Editor Implementation Plan
 
-**Status:** Plan (pre-implementation)
+**Status:** Plan (based on corrected analysis)
 **Reference:** [analysis.md](./analysis.md)
 
 ---
 
 ## 1. Overview
 
-This plan outlines how to implement the map editor based on requirements in `analysis.md`.
+Implement a map editor that matches the simulator's exact data model, format, and visual rendering.
 
-**Key principles:**
-- Build in phases (core → features → polish)
-- Each phase is independently testable
-- Dependencies must be resolved in order
-- UI consistent with simulator
+**Critical Correction from Analysis:**
+- Stream is a CELL PROPERTY (density + stream_dir), not separate metadata
+- Stream doesn't change terrain density
+- Stream rendering: Use stream texture + procedural arrow overlay
 
 ---
 
 ## 2. Core Architecture
 
-### Entry Point
-- Scene: `scenes/map_editor_scene.tscn`
-- Script: `src/ui/map_editor/map_editor.gd`
-- Launches from: Main menu (existing button)
-
-### Major Components
-
-| Component | Purpose | Scope |
-|-----------|---------|-------|
-| Canvas (Control node) | Displays and handles map editing | Direct _draw() rendering |
-| Left Panel | Tool selection and options | VBoxContainer with expandable groups |
-| Right Panel | Map info and reference | Legend, statistics, element properties |
-| Top Toolbar | File and history operations | HBoxContainer with buttons |
-| Scrollbars | Large map navigation | Drawn, not UI elements |
-| File System | Load/save maps | FileAccess + JSON |
-| History System | Undo functionality | Array of grid snapshots |
-
-### Data Structures
+### Data Model (Matches Simulator)
 
 ```gdscript
-# In-memory map state
-grid: Array[Array[String]]                        # grid[y][x] = density
-bloodstreams: Array[Dictionary]                  # {x, y, stream: direction}
-habitas_points: Array[Dictionary]                # {x, y}
-azn_nodes: Array[Dictionary]                     # {x, y, quantity}
-injection_zones: Array[Dictionary]               # {player, x1, y1, x2, y2}
+# In-memory representation
+class MapState:
+  width: int
+  height: int
+  cells: Array  # cells[y * width + x] = {density: int, stream_dir: int}
+  
+  habitas_points: Array[Vector2i]
+  azn_nodes: Array[{position: Vector2i, quantity: int}]
+  injection_zones: Array[{player: int, rect: Rect2i}]
+```
 
-# Editor state
-selected_tool: String                            # "terrain" | "habitas" | "azn" | "stream" | "zone"
-selected_density: String                         # "low" | "medium" | "high" | "bone"
-selected_element: Dictionary                     # currently selected element (if any)
-history: Array[GridSnapshot]                     # full grid states
-zoom: float                                      # 0.5 to 3.0
-scroll_x, scroll_y: int                          # pan offset
+### Key Constants
+
+```gdscript
+CELL_SIZE = 16
+
+# Density Enum
+Density = {LOW: 0, MEDIUM: 1, HIGH: 2, BONE: 3}
+
+# StreamDir Enum  
+StreamDir = {NONE: 0, NORTH: 1, SOUTH: 2, EAST: 3, WEST: 4}
+
+# Rendering
+STREAM_COLOR = Color(0.70, 0.25, 0.25, 0.80)  # Arrow color
+```
+
+### Texture Assets (Actual Files)
+
+```
+Terrain:
+  res://assets/tiles/tile_low.png
+  res://assets/tiles/tile_medium.png
+  res://assets/tiles/tile_high.png
+  res://assets/tiles/tile_bone.png
+
+Streams:
+  res://assets/tiles/tile_stream_h.png
+  res://assets/tiles/tile_stream_v.png
+
+Elements:
+  res://assets/markers/habitas_neutral.png
+  res://assets/markers/habitas_owned.png
+  res://assets/markers/azn_node.png
 ```
 
 ---
 
 ## 3. Implementation Phases
 
-### Phase 1: Core Canvas (CRITICAL)
-**Goal:** Get map display and basic painting working
+### Phase 1: Core Rendering (Canvas + Correct Display)
+
+**Goal:** Display maps exactly as simulator shows them
 
 **Features:**
-1. Load map from JSON
-2. Display terrain grid with sprites/fallback colors
-3. Single left-click painting
-4. Basic zoom (scroll wheel)
-5. Pan (middle-click drag)
-6. Scrollbars visible
+1. Load map JSON file using MapLoader format
+2. Initialize MapData structure correctly (flat cell array)
+3. Render terrain:
+   - If stream_dir == NONE: draw terrain texture
+   - If stream_dir != NONE: draw stream texture
+4. Render stream arrows (procedural):
+   - Shaft from cell center in direction vector
+   - Arrowhead with 2 perpendicular lines
+   - Color: STREAM_COLOR
+5. Render grid lines (subtle, per cell)
+6. Render elements (habitas, AZN, zones)
+7. Zoom: 0.5x to 3.0x
+8. Pan: middle-click drag
 
 **Deliverables:**
-- Map loads and displays correctly
-- Can paint single cells
-- Zoom/pan work
-- Visual feedback (grid, colors)
+- Map loads and displays identically to simulator
+- All terrain colors correct
+- Streams show as stream texture + arrow (not full tile)
+- Arrows point in correct direction
+- Elements visible
+- Zoom/pan smooth
 
-**Time estimate:** 4-6 hours
+**Time:** 6-8 hours
+
 **Tests:**
-- Load simple_tissue.json, verify display matches simulator
-- Paint a cell, verify color changes
-- Zoom in/out, verify tile size changes
-- Pan with middle-click, verify offset correct
+- Load simple_tissue.json, compare pixel-for-pixel to simulator
+- Verify arrow directions match stream_dir enum
+- Verify terrain color matches tile texture
+- Zoom in/out, verify no artifacts
+- Pan, verify scrolling correct
 
 ---
 
-### Phase 2: Terrain Tools
-**Goal:** Complete terrain editing workflows
+### Phase 2: Terrain Editing
+
+**Goal:** Paint terrain while keeping streams intact
 
 **Features:**
-1. Multi-cell painting (click + drag with Bresenham line)
-2. Flood fill (right-click)
-3. Undo/Redo with history
-4. Clear map button
-5. Add border button
-6. Tool selection UI (left panel)
+1. Left-click to paint single cell
+2. Left-click drag to paint continuous path
+3. Right-click to flood-fill connected region
+4. Tool selector: choose density (LOW/MEDIUM/HIGH/BONE)
+5. Clear map button
+6. Add border button
+7. CRITICAL: When painting, only change density, NOT stream_dir
 
 **Deliverables:**
-- Left panel with terrain options (LOW, MEDIUM, HIGH, BONE)
-- Drag painting works smoothly
-- Flood fill fills correctly
-- Undo reverts changes
-- Clear and border buttons work
+- Can select density from UI
+- Painting changes only density, preserves streams
+- Flood-fill works on connected density regions
+- Clear resets all to LOW/NONE
+- Border adds BONE cells around edge
 
-**Time estimate:** 4-5 hours
+**Time:** 4-5 hours
+
 **Tests:**
-- Drag paint across 10+ cells in a line, verify continuous
-- Right-click on region, verify all connected cells fill
-- Undo after fill, verify grid restores
-- Add border, verify edge cells are bone
+- Paint cell, verify density changed but stream_dir unchanged
+- Flood-fill, verify all connected same-density cells change
+- Paint over stream cell, verify arrow still shows
+- Save/load, verify stream preserved
 
 ---
 
-### Phase 3: Element Placement
-**Goal:** Place all four element types
+### Phase 3: Stream Placement
+
+**Goal:** Place streams with correct enum values
 
 **Features:**
-1. Bloodstreams (with direction selector: N, S, E, W, N-S, E-W)
-2. Habitas points (click to place)
-3. AZN nodes (click to place)
-4. Injection zones (click-drag rectangle)
-5. Element selection and properties display
-6. Delete selected elements
+1. Stream placement mode
+2. Direction selector: N/S/E/W
+3. Click to place stream on cell (changes stream_dir, not density)
+4. Verify cell shows stream texture + arrow
+5. Can place stream on any terrain type
+6. CRITICAL: Don't change terrain when placing stream
 
 **Deliverables:**
-- Right panel shows legend and element counts
-- Can place all element types
-- Elements display correctly on canvas
-- Can select and modify elements
-- Can delete elements
+- Direction buttons for N/S/E/W
+- Click places stream with correct enum value
+- Stream texture appears
+- Arrow points correctly
+- Can place over any density terrain
 
-**Time estimate:** 5-6 hours
+**Time:** 3-4 hours
+
 **Tests:**
-- Place bloodstream in each direction, verify arrow displays correctly
-- Place habitas point, verify red circle appears
-- Place AZN node with quantity, verify yellow circle appears
-- Drag to create injection zone, verify rectangle appears
-- Click element, verify properties display in right panel
-- Delete element, verify it's removed
+- Place stream N/S/E/W, verify arrow direction
+- Place stream on each density, verify terrain visible under stream texture
+- Verify JSON stream field matches direction
 
 ---
 
-### Phase 4: File Operations
-**Goal:** Load, save, and persist maps
+### Phase 4: Element Placement
+
+**Goal:** Place habitas, AZN, zones
 
 **Features:**
-1. Load Map button (shows file list)
-2. Save Map button (custom filename)
-3. Confirmation dialogs (clear, load over unsaved, overwrite)
-4. Save validation (warns about missing elements)
-5. JSON format matches simulator exactly
-6. Round-trip test (load → edit → save → load)
+1. Habitas mode: click to place point
+2. AZN mode: click to place with quantity selector
+3. Zone mode: drag rectangle to define injection zone, assign player
+4. Display elements as markers on canvas
+5. Delete selected elements
 
 **Deliverables:**
-- Load dialog shows available maps
-- Can select and load any map
-- Can save with custom filename
-- Confirmation prevents data loss
-- Validation warnings display before save
-- Saved maps load in simulator
+- Elements place at correct grid positions
+- Habitas shows as marker
+- AZN shows with quantity
+- Zones show as rectangles
+- Can delete any element
 
-**Time estimate:** 3-4 hours
+**Time:** 4-5 hours
+
 **Tests:**
-- Load simple_tissue.json, edit, save as new name, load new file
-- Verify saved JSON format matches simulator requirement
-- Try to clear unsaved map, verify confirmation
-- Save map without habitas points, verify warning
+- Place each element type
+- Verify JSON format matches loader expectations
+- Delete and undo works
 
 ---
 
-### Phase 5: Polish & Refinement
-**Goal:** Professional appearance and UX
+### Phase 5: File I/O and Persistence
+
+**Goal:** Save/load maps in correct JSON format
 
 **Features:**
-1. Status bar with coordinate display
-2. Hover coordinates on cells
-3. Visual feedback for current tool
-4. Keyboard shortcuts (Ctrl+S, Ctrl+Z, arrow pan)
-5. Help/About dialog
-6. Better error messages
-7. Auto-save functionality (optional)
+1. Load dialog: browse res://maps/, select map
+2. Save As dialog: custom filename
+3. Generate correct JSON:
+   - Array of cells with x, y, density, stream (if not NONE)
+   - Arrays for habitas_points, azn_nodes, injection_zones
+   - Correct format for loader to parse
+4. Validation warnings:
+   - At least 1 habitas point
+   - At least 1 AZN node
+   - At least 1 injection zone
+5. Round-trip test: load → save → load produces identical result
 
 **Deliverables:**
-- Status bar shows current tool and coordinates
-- Cursor changes based on mode (crosshair for place, etc.)
-- Keyboard shortcuts work
-- Help dialog shows all shortcuts
-- Error messages are clear and actionable
+- Load existing maps
+- Save with custom filename
+- Warnings before incomplete map save
+- Saved JSON loads in simulator without error
 
-**Time estimate:** 2-3 hours
+**Time:** 3-4 hours
+
 **Tests:**
-- Hover over cells, verify coordinates display
-- Press Ctrl+S, verify save works
-- Press Arrow keys, verify pan works
-- Click Help, verify shortcuts listed
+- Load map, verify data matches simulator
+- Edit, save, load again
+- Compare loaded vs original (should be identical)
+- Try save without required elements, verify warning
 
 ---
 
-## 4. Implementation Order & Dependencies
+### Phase 6: Undo/History and Polish
+
+**Goal:** User comfort and error recovery
+
+**Features:**
+1. Undo button: reverts last action
+2. History limit: 50 states
+3. Saves full state: all cells + streams + elements
+4. Status bar:
+   - Current tool
+   - Coordinates on hover
+   - Mode feedback
+5. Keyboard shortcuts: Ctrl+Z (undo), Ctrl+S (save)
+
+**Deliverables:**
+- Undo works for all operations
+- Status bar clear
+- Error messages helpful
+- No data loss
+
+**Time:** 2-3 hours
+
+**Tests:**
+- Paint, undo, verify reverted
+- Undo multiple times, verify state correct
+- Place element, undo, verify removed
+
+---
+
+## 4. Implementation Order
 
 ```
-Phase 1: Core Canvas (no dependencies)
-  ├── Load map JSON
-  ├── Render grid with sprites
-  ├── Single click paint
-  ├── Zoom (scroll wheel)
-  ├── Pan (middle-click)
-  └── Scrollbars
+Phase 1: Rendering (CRITICAL FIRST)
+  ├── Load map using MapLoader format
+  ├── Display terrain texture (based on density)
+  ├── Display stream texture (tile_stream_h or tile_stream_v)
+  ├── Draw procedural arrows (3-line arrowhead)
+  ├── Draw elements
+  └── Zoom/pan controls
 
-Phase 2: Terrain Tools (depends on Phase 1)
-  ├── Multi-cell drag paint
+Phase 2: Terrain Editing
+  ├── Paint single cell (preserve stream_dir)
+  ├── Drag paint
   ├── Flood fill
-  ├── History/undo system
-  ├── Tool selection UI
-  └── Button actions (clear, border)
+  └── Clear/border buttons
 
-Phase 3: Elements (depends on Phase 1, Phase 2)
-  ├── Bloodstream placement
+Phase 3: Streams
+  ├── Stream mode selector
+  ├── Direction buttons
+  ├── Click to place (set stream_dir)
+  └── Verify rendering correct
+
+Phase 4: Elements
   ├── Habitas placement
   ├── AZN placement
-  ├── Injection zone creation
-  ├── Element selection
-  └── Element deletion
+  ├── Zone creation
+  └── Delete operations
 
-Phase 4: File Ops (depends on all previous)
+Phase 5: File I/O
   ├── Load dialog
   ├── Save dialog
-  ├── Confirmation dialogs
-  ├── Validation warnings
-  └── JSON persistence
+  ├── JSON generation (correct format)
+  └── Validation warnings
 
-Phase 5: Polish (depends on all previous)
+Phase 6: Polish
+  ├── Undo/history
   ├── Status bar
-  ├── Coordinate display
-  ├── Visual feedback
-  ├── Keyboard shortcuts
-  └── Help dialog
+  ├── Shortcuts
+  └── Error handling
 ```
 
 ---
 
-## 5. Coordinate System & Math
+## 5. Critical Implementation Details
 
-### Screen to Grid Conversion
-```gdscript
-grid_x = (screen_x - canvas_x + scroll_x) / (TILE_SIZE * zoom)
-grid_y = (screen_y - canvas_y + scroll_y) / (TILE_SIZE * zoom)
+### Cell Rendering Logic
 
-# Clamp to map bounds
-grid_x = clampi(grid_x, 0, map_width - 1)
-grid_y = clampi(grid_y, 0, map_height - 1)
+```
+For each visible cell (x, y):
+  if cell.stream_dir == StreamDir.NONE:
+    // Draw terrain
+    texture = TILE_TEX[cell.density]
+    draw_texture(texture, screen_pos, CELL_SIZE)
+  else:
+    // Draw stream cell
+    if cell.stream_dir in [EAST, WEST]:
+      texture = STREAM_TEX_H
+      if cell.stream_dir == WEST:
+        flip_horizontal = true
+    else:  // NORTH, SOUTH
+      texture = STREAM_TEX_V
+      if cell.stream_dir == NORTH:
+        flip_vertical = true
+    
+    draw_texture(texture, screen_pos, CELL_SIZE)
+    draw_stream_arrow(screen_pos, cell.stream_dir)
+  
+  // Draw grid line
+  draw_rect_outline(screen_pos, CELL_SIZE, GRID_COLOR)
 ```
 
-### Grid to Screen Conversion
-```gdscript
-screen_x = canvas_x + (grid_x * TILE_SIZE * zoom) - scroll_x
-screen_y = canvas_y + (grid_y * TILE_SIZE * zoom) - scroll_y
+### Stream Arrow Rendering
+
+```
+func draw_stream_arrow(screen_pos: Vector2, stream_dir: int):
+  center = screen_pos + Vector2(CELL_SIZE * 0.5, CELL_SIZE * 0.5)
+  direction_vec = stream_to_vec(stream_dir)
+  
+  // Arrow shaft
+  shaft_length = CELL_SIZE * 0.5 - 3.5
+  base = center - direction_vec * shaft_length * 0.5
+  tip = center + direction_vec * shaft_length
+  draw_line(base, tip, STREAM_COLOR, 1.5)
+  
+  // Arrowhead (2 perpendicular lines)
+  perpendicular = Vector2(-direction_vec.y, direction_vec.x) * 2.5
+  head_back = tip - direction_vec * 3.5
+  draw_line(tip, head_back + perpendicular, STREAM_COLOR, 1.5)
+  draw_line(tip, head_back - perpendicular, STREAM_COLOR, 1.5)
 ```
 
-### Scroll Range
-```gdscript
-max_scroll_x = max(0, map_width * TILE_SIZE * zoom - canvas_width)
-max_scroll_y = max(0, map_height * TILE_SIZE * zoom - canvas_height)
+### JSON Generation for Save
 
-scroll_x = clampi(scroll_x, 0, max_scroll_x)
-scroll_y = clampi(scroll_y, 0, max_scroll_y)
+```
+cells = []
+for y in range(height):
+  for x in range(width):
+    cell = cells[y * width + x]
+    if cell.density != Density.LOW or cell.stream_dir != StreamDir.NONE:
+      cell_obj = {
+        "x": x,
+        "y": y,
+        "density": density_to_string(cell.density)
+      }
+      if cell.stream_dir != StreamDir.NONE:
+        cell_obj["stream"] = stream_dir_to_string(cell.stream_dir)
+      cells.append(cell_obj)
+
+map_data = {
+  "name": filename,
+  "width": width,
+  "height": height,
+  "default_density": "low",
+  "cells": cells,
+  "habitas_points": habitas_points,
+  "azn_nodes": azn_nodes,
+  "injection_zones": injection_zones
+}
+```
+
+### JSON Loading
+
+Use existing MapLoader format - editor must produce identical output to what simulator loads.
+
+---
+
+## 6. Data Type Mappings
+
+### String → Enum (Load)
+```
+"low" → Density.LOW (0)
+"medium" → Density.MEDIUM (1)
+"high" → Density.HIGH (2)
+"bone" → Density.BONE (3)
+
+"north" → StreamDir.NORTH (1)
+"south" → StreamDir.SOUTH (2)
+"east" → StreamDir.EAST (3)
+"west" → StreamDir.WEST (4)
+(missing) → StreamDir.NONE (0)
+```
+
+### Enum → String (Save)
+```
+Density.LOW → "low"
+Density.MEDIUM → "medium"
+Density.HIGH → "high"
+Density.BONE → "bone"
+
+StreamDir.NORTH → "north"
+StreamDir.SOUTH → "south"
+StreamDir.EAST → "east"
+StreamDir.WEST → "west"
+(StreamDir.NONE is omitted from JSON)
 ```
 
 ---
 
-## 6. Key Implementation Details
+## 7. Success Criteria
 
-### Terrain Rendering
-- Use sprites if available (res://assets/tiles/tile_*.png)
-- Fallback to solid colors if sprites missing
-- Always draw grid lines (Color.GRAY)
-- Iterate only visible tiles (cull off-screen)
+### Phase 1 Complete When
+- ✓ Load map, display matches simulator pixel-for-pixel
+- ✓ Terrain colors correct for all 4 densities
+- ✓ Streams show stream texture + arrow (not full tile)
+- ✓ Arrow directions match stream_dir values
+- ✓ Zoom/pan smooth and correct
 
-### Bloodstream Display
-- Draw as directional arrow (red/orange color)
-- Arrow at center of tile
-- Arrow size: 6 pixels * zoom
-- Overlaid on terrain (drawn after terrain)
-- No background tile color
+### Phase 2 Complete When
+- ✓ Can paint terrain without affecting streams
+- ✓ Flood-fill works correctly
+- ✓ Stream preserved when painting over it
+- ✓ Clear and border work
 
-### Element Display
-- Habitas: Gold circle (6px radius)
-- AZN: Yellow circle (4px radius)  
-- Zones: Semi-transparent rectangles (green/red)
-- All drawn on top of terrain
+### Phase 3 Complete When
+- ✓ Can place streams in all 4 directions
+- ✓ Arrow shows immediately after placement
+- ✓ Terrain unchanged when placing stream
 
-### History System
-- Save full grid state before each action
-- Max 50 states in history
-- Undo removes from end, decrements index
-- New action after undo clears redo states
-- Memory: ~800KB per 60×60 map state
+### Phase 4 Complete When
+- ✓ All element types placeable
+- ✓ Elements display correctly
+- ✓ Can delete elements
 
-### File Operations
-- Load: `FileAccess.open()` + `JSON.parse_string()`
-- Save: Build map object + `JSON.stringify()` + `FileAccess.open(..., WRITE)`
-- Format: Exactly matches existing map JSON structure
-- Validation: Check required fields before save
+### Phase 5 Complete When
+- ✓ JSON format matches loader exactly
+- ✓ Round-trip load→save→load produces identical result
+- ✓ Validation warnings work
+- ✓ Saved maps load in simulator error-free
 
----
+### Phase 6 Complete When
+- ✓ Undo reverts all operations
+- ✓ History limit enforced (50 states)
+- ✓ Status bar clear
+- ✓ No crashes or data loss
 
-## 7. Testing Strategy
-
-### Unit Tests (per phase)
-- Coordinate math: screen↔grid conversion at various zoom/pan
-- Flood fill: Connected region detection
-- History: State save/restore
-- JSON: Round-trip (load → save → load)
-
-### Integration Tests
-- Load map → paint → save → load → verify match
-- Element placement → selection → modification → save
-- Undo chain (multiple actions → undo all → verify initial state)
-
-### Visual Tests
-- Load simple_tissue.json, compare to simulator screenshot
-- Verify sprite colors match
-- Verify bloodstream arrows position and direction
-- Verify element positions and appearance
+### Overall Complete When
+- ✓ Matches simulator rendering exactly
+- ✓ Can create/edit maps intuitively
+- ✓ JSON format perfect match
+- ✓ No visual discrepancies
+- ✓ User can complete map in <5 minutes
 
 ---
 
 ## 8. Risk Mitigation
 
-| Risk | Phase | Mitigation |
-|---|---|---|
-| Coordinate math errors | Phase 1 | Thorough testing, visual debugging |
-| Performance lag on large maps | Phase 1-2 | Profile, optimize hot paths |
-| JSON format mismatch | Phase 4 | Validate against existing maps |
-| Undo state bloat | Phase 2 | Limit to 50 states, memory budget |
-| Data loss on crash | Phase 4 | Auto-save every N minutes |
-| Confusing UI | Phase 5 | User testing, clear feedback |
+| Risk | Mitigation |
+|---|---|
+| Arrow direction wrong | Implement exactly like simulator, test all 4 directions |
+| JSON format mismatch | Use MapLoader to verify format |
+| Stream texture missing | Verify files exist before load |
+| Performance issues | Profile with 80×80 maps, optimize if needed |
+| Coordinate math off | Test at various zoom levels, verify clicks map to correct cells |
+| Data loss | Keep history, add confirmation dialogs |
 
 ---
 
-## 9. File Structure
+## 9. Timeline
 
-```
-src/ui/map_editor/
-├── map_editor.gd              (main script, all logic)
-└── (optional) map_editor_ui.gd (separate if UI grows complex)
-
-scenes/
-└── map_editor_scene.tscn      (scene layout)
-
-assets/tiles/
-├── tile_low.png               (required)
-├── tile_medium.png            (required)
-├── tile_high.png              (required)
-└── tile_bone.png              (required)
-
-maps/
-├── simple_tissue.json          (test map)
-├── vascular_network.json       (test map)
-└── ...
-
-docs/versioning/v0.0.2/
-├── analysis.md                (requirements)
-└── plan.md                    (this document)
-```
+| Phase | Hours | Note |
+|-------|-------|------|
+| Phase 1 | 6-8 | Critical: rendering must be exact |
+| Phase 2 | 4-5 | Core editing feature |
+| Phase 3 | 3-4 | Stream placement |
+| Phase 4 | 4-5 | Element placement |
+| Phase 5 | 3-4 | File I/O |
+| Phase 6 | 2-3 | Polish |
+| **Total** | **22-29 hours** | |
 
 ---
 
-## 10. Success Metrics
+## 10. Start Condition
 
-### Phase 1 Complete When
-- ✓ simple_tissue.json loads and displays
-- ✓ Can paint single cell with left-click
-- ✓ Zoom in/out works (0.5x to 3.0x)
-- ✓ Pan smooth and correct
-- ✓ No crashes or obvious bugs
-
-### Phase 2 Complete When
-- ✓ Drag painting works smoothly (Bresenham line)
-- ✓ Flood fill fills entire connected region
-- ✓ Undo chain works (undo multiple actions in sequence)
-- ✓ Tool selection shows in UI
-- ✓ Clear and border buttons work
-
-### Phase 3 Complete When
-- ✓ All element types placeable
-- ✓ Elements display correctly on map
-- ✓ Element selection works
-- ✓ Can delete elements
-- ✓ Right panel shows updated counts
-
-### Phase 4 Complete When
-- ✓ Load dialog shows available maps
-- ✓ Can load and edit existing maps
-- ✓ Save with custom filename works
-- ✓ Validation warnings display
-- ✓ Saved map loads in simulator without errors
-
-### Phase 5 Complete When
-- ✓ Coordinates display on hover
-- ✓ Keyboard shortcuts work
-- ✓ Visual feedback clear for current tool
-- ✓ Help/shortcuts dialog works
-- ✓ No remaining usability issues
-
-### Overall Complete When
-- ✓ All 15 success criteria from analysis.md met
-- ✓ User can create maps in under 5 minutes
-- ✓ UI consistent with simulator
-- ✓ No crashes or data loss
-- ✓ Saved maps work in game
-
----
-
-## 11. Timeline Estimate
-
-| Phase | Hours | Cumulative |
-|-------|-------|-----------|
-| Phase 1 | 4-6 | 4-6 |
-| Phase 2 | 4-5 | 8-11 |
-| Phase 3 | 5-6 | 13-17 |
-| Phase 4 | 3-4 | 16-21 |
-| Phase 5 | 2-3 | 18-24 |
-| **Total** | **18-24 hours** | |
-
-**Note:** Assumes focused work, minimal interruptions, no major bugs requiring rework.
-
----
-
-## 12. Start Condition
-
-All requirements locked in `analysis.md`. Ready to implement Phase 1.
-
+✅ Analysis complete and based on simulator code review
+✅ Data model correct (stream as cell property)
+✅ Rendering algorithm documented (stream texture + arrow)
+✅ JSON format specified
+✅ Ready to implement Phase 1
