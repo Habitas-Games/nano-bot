@@ -11,13 +11,14 @@ var grid: Array = []
 var selected_density: String = "low"
 
 var zoom: float = 1.0
-var pan: Vector2 = Vector2.ZERO
 var is_panning: bool = false
 var pan_start: Vector2 = Vector2.ZERO
 var is_painting: bool = false
 var last_painted_pos: Vector2 = Vector2.ZERO
 
 var sprites: Dictionary = {}
+var canvas: Control
+var scroll_container: ScrollContainer
 
 func _ready() -> void:
 	_load_sprites()
@@ -134,49 +135,86 @@ func _setup_ui() -> void:
 	canvas_section.add_child(status_container)
 
 	var status_label_left := Label.new()
-	status_label_left.text = "Click & drag to paint | Right-click to fill | Scroll to zoom | Middle-click to pan"
+	status_label_left.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom | Middle-click to pan"
 	status_label_left.add_theme_font_size_override("font_size", 10)
 	status_container.add_child(status_label_left)
 
-func _init_grid() -> void:
-	grid.clear()
-	for y in range(map_height):
-		var row: Array = []
-		for x in range(map_width):
-			row.append("low")
-		grid.append(row)
+	# ScrollContainer for canvas
+	scroll_container = ScrollContainer.new()
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	canvas_section.add_child(scroll_container)
 
-func _input(event: InputEvent) -> void:
+	# Canvas Control for drawing
+	canvas = Control.new()
+	canvas.custom_minimum_size = Vector2(map_width * TILE_SIZE + 100, map_height * TILE_SIZE + 100)
+	canvas.draw.connect(_on_canvas_draw)
+	canvas.gui_input.connect(_on_canvas_input)
+	scroll_container.add_child(canvas)
+
+func _on_canvas_draw() -> void:
+	for y in range(map_height):
+		for x in range(map_width):
+			var screen_pos = Vector2(x, y) * TILE_SIZE
+			var screen_size = TILE_SIZE
+
+			var density = grid[y][x]
+			var color = Color.WHITE
+
+			match density:
+				"low":
+					color = Color(0.8, 0.6, 0.6)
+				"medium":
+					color = Color(0.7, 0.5, 0.7)
+				"high":
+					color = Color(0.5, 0.2, 0.5)
+				"bone":
+					color = Color(0.2, 0.2, 0.2)
+
+			if sprites.get(density) != null:
+				canvas.draw_set_transform(screen_pos, 0, Vector2(1, 1))
+				canvas.draw_texture(sprites[density], Vector2.ZERO)
+				canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+			else:
+				var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
+				canvas.draw_rect(rect, color)
+
+			var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
+			canvas.draw_rect(rect, Color.GRAY, false, 1.0)
+
+func _on_canvas_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.2, 3.0)
-			queue_redraw()
+			_update_canvas_size()
+			canvas.queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = max(zoom - 0.2, 0.5)
-			queue_redraw()
+			_update_canvas_size()
+			canvas.queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
 			is_panning = true
-			pan_start = get_local_mouse_position()
+			pan_start = event.position
 			return
 		elif event.button_index == MOUSE_BUTTON_MIDDLE and not event.pressed:
 			is_panning = false
 			return
 
 	if event is InputEventMouseMotion and is_panning:
-		var delta = get_local_mouse_position() - pan_start
-		pan += delta
-		pan_start = get_local_mouse_position()
-		queue_redraw()
+		var delta = event.position - pan_start
+		scroll_container.scroll_horizontal -= int(delta.x)
+		scroll_container.scroll_vertical -= int(delta.y)
+		pan_start = event.position
 		return
 
 	if event is InputEventMouseMotion and is_painting:
 		_paint_line(last_painted_pos, event.position)
 		last_painted_pos = event.position
-		queue_redraw()
+		canvas.queue_redraw()
 		return
 
 	if event is InputEventMouseButton:
@@ -185,22 +223,23 @@ func _input(event: InputEvent) -> void:
 				is_painting = true
 				last_painted_pos = event.position
 				_paint_at(event.position)
-				queue_redraw()
+				canvas.queue_redraw()
 			else:
 				is_painting = false
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			var local_pos = get_local_mouse_position() - Vector2(200, 30)
-			var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
+			var grid_pos = event.position / TILE_SIZE
 			var x = int(grid_pos.x)
 			var y = int(grid_pos.y)
 
 			if x >= 0 and x < map_width and y >= 0 and y < map_height:
 				_flood_fill(x, y, grid[y][x])
-				queue_redraw()
+				canvas.queue_redraw()
+
+func _update_canvas_size() -> void:
+	canvas.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom + 100, map_height * TILE_SIZE * zoom + 100)
 
 func _paint_at(screen_pos: Vector2) -> void:
-	var local_pos = screen_pos - Vector2(200, 30)
-	var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
+	var grid_pos = screen_pos / TILE_SIZE
 	var x = int(grid_pos.x)
 	var y = int(grid_pos.y)
 
@@ -208,11 +247,8 @@ func _paint_at(screen_pos: Vector2) -> void:
 		grid[y][x] = selected_density
 
 func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
-	var start_local = from_pos - Vector2(200, 30)
-	var end_local = to_pos - Vector2(200, 30)
-
-	var start_grid = (start_local - pan) / (TILE_SIZE * zoom)
-	var end_grid = (end_local - pan) / (TILE_SIZE * zoom)
+	var start_grid = from_pos / TILE_SIZE
+	var end_grid = to_pos / TILE_SIZE
 
 	var x0 = int(start_grid.x)
 	var y0 = int(start_grid.y)
@@ -243,38 +279,17 @@ func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
 			err += dx
 			y += sy
 
-func _flood_fill(start_x: int, start_y: int, target: String) -> void:
-	if start_x < 0 or start_x >= map_width or start_y < 0 or start_y >= map_height:
-		return
-
-	var stack: Array = [[start_x, start_y]]
-	var visited: Array = []
-	var count = 0
-
-	while stack.size() > 0 and count < 10000:
-		count += 1
-		var pos = stack.pop_back()
-		var x = pos[0]
-		var y = pos[1]
-
-		if x < 0 or x >= map_width or y < 0 or y >= map_height:
-			continue
-		if [x, y] in visited:
-			continue
-		if grid[y][x] != target:
-			continue
-
-		visited.append([x, y])
-		grid[y][x] = selected_density
-
-		stack.append([x + 1, y])
-		stack.append([x - 1, y])
-		stack.append([x, y + 1])
-		stack.append([x, y - 1])
+func _init_grid() -> void:
+	grid.clear()
+	for y in range(map_height):
+		var row: Array = []
+		for x in range(map_width):
+			row.append("low")
+		grid.append(row)
 
 func _clear_map() -> void:
 	_init_grid()
-	queue_redraw()
+	canvas.queue_redraw()
 
 func _add_border() -> void:
 	for x in range(map_width):
@@ -283,7 +298,7 @@ func _add_border() -> void:
 	for y in range(map_height):
 		grid[y][0] = "bone"
 		grid[y][map_width - 1] = "bone"
-	queue_redraw()
+	canvas.queue_redraw()
 
 func _load_map() -> void:
 	var dir = DirAccess.open("res://maps/")
@@ -317,7 +332,8 @@ func _load_map() -> void:
 				if x >= 0 and x < map_width and y >= 0 and y < map_height:
 					grid[y][x] = cell.get("density", "low")
 
-		queue_redraw()
+		_update_canvas_size()
+		canvas.queue_redraw()
 
 func _save_map() -> void:
 	var cells: Array = []
@@ -349,33 +365,31 @@ func _save_map() -> void:
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
 
-func _draw() -> void:
-	# Draw grid with sprites
-	for y in range(map_height):
-		for x in range(map_width):
-			var screen_pos = Vector2(200, 30) + pan + Vector2(x, y) * TILE_SIZE * zoom
-			var screen_size = TILE_SIZE * zoom
+func _flood_fill(start_x: int, start_y: int, target: String) -> void:
+	if start_x < 0 or start_x >= map_width or start_y < 0 or start_y >= map_height:
+		return
 
-			var density = grid[y][x]
-			var color = Color.WHITE
+	var stack: Array = [[start_x, start_y]]
+	var visited: Array = []
+	var count = 0
 
-			match density:
-				"low":
-					color = Color(0.8, 0.6, 0.6)
-				"medium":
-					color = Color(0.7, 0.5, 0.7)
-				"high":
-					color = Color(0.5, 0.2, 0.5)
-				"bone":
-					color = Color(0.2, 0.2, 0.2)
+	while stack.size() > 0 and count < 10000:
+		count += 1
+		var pos = stack.pop_back()
+		var x = pos[0]
+		var y = pos[1]
 
-			if sprites.get(density) != null:
-				draw_set_transform(screen_pos, 0, Vector2(zoom, zoom))
-				draw_texture(sprites[density], Vector2.ZERO)
-				draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
-			else:
-				var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
-				draw_rect(rect, color)
+		if x < 0 or x >= map_width or y < 0 or y >= map_height:
+			continue
+		if [x, y] in visited:
+			continue
+		if grid[y][x] != target:
+			continue
 
-			var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
-			draw_rect(rect, Color.GRAY, false, 1.0)
+		visited.append([x, y])
+		grid[y][x] = selected_density
+
+		stack.append([x + 1, y])
+		stack.append([x - 1, y])
+		stack.append([x, y + 1])
+		stack.append([x, y - 1])
