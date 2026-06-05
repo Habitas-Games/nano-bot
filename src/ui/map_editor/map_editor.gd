@@ -19,8 +19,8 @@ var terrain_buttons: Dictionary = {}
 var history: Array = []
 var history_index: int = -1
 const MAX_HISTORY: int = 50
-var h_scrollbar: HScrollBar
-var v_scrollbar: VScrollBar
+var scrollbar_height: int = 15
+var scrollbar_width: int = 15
 
 func _ready() -> void:
 	_load_sprites()
@@ -132,7 +132,7 @@ func _setup_ui() -> void:
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
 	panel.add_child(back_btn)
 
-	# RIGHT SIDE with scrollbars
+	# RIGHT SIDE with status
 	var right := VBoxContainer.new()
 	root.add_child(right)
 
@@ -141,37 +141,21 @@ func _setup_ui() -> void:
 	status.add_theme_font_size_override("font_size", 10)
 	right.add_child(status)
 
-	# Canvas container with scrollbars
-	var canvas_container := VBoxContainer.new()
-	right.add_child(canvas_container)
-
-	# Horizontal scrollbar
-	h_scrollbar = HScrollBar.new()
-	h_scrollbar.custom_minimum_size = Vector2(0, 15)
-	h_scrollbar.value_changed.connect(_on_h_scroll)
-	canvas_container.add_child(h_scrollbar)
-
-	# Vertical scrollbar
-	v_scrollbar = VScrollBar.new()
-	v_scrollbar.custom_minimum_size = Vector2(15, 0)
-	v_scrollbar.value_changed.connect(_on_v_scroll)
-	right.add_child(v_scrollbar)
-
 func _select_density(dens: String) -> void:
 	selected_density = dens
 	for d in terrain_buttons.keys():
 		terrain_buttons[d].button_pressed = (d == dens)
 
 func _draw() -> void:
-	# Draw background
-	draw_rect(Rect2(220, 30, get_size().x - 220, get_size().y - 30), Color(0.2, 0.2, 0.2))
-
-	# Draw grid
 	var start_x = 220
 	var start_y = 30
-	var canvas_width = get_size().x - 220
-	var canvas_height = get_size().y - 30
+	var canvas_width = get_size().x - 220 - scrollbar_width
+	var canvas_height = get_size().y - 30 - scrollbar_height
 
+	# Draw background
+	draw_rect(Rect2(start_x, start_y, canvas_width, canvas_height), Color(0.2, 0.2, 0.2))
+
+	# Draw grid
 	for y in range(map_height):
 		for x in range(map_width):
 			var screen_x = start_x + (x * TILE_SIZE * zoom) - scroll_x
@@ -179,9 +163,9 @@ func _draw() -> void:
 			var size = TILE_SIZE * zoom
 
 			# Skip if off-screen
-			if screen_x + size < start_x or screen_x > get_size().x:
+			if screen_x + size < start_x or screen_x > start_x + canvas_width:
 				continue
-			if screen_y + size < start_y or screen_y > get_size().y:
+			if screen_y + size < start_y or screen_y > start_y + canvas_height:
 				continue
 
 			var density = grid[y][x]
@@ -200,6 +184,28 @@ func _draw() -> void:
 
 			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
 
+	# Draw scrollbars
+	var total_width = int(map_width * TILE_SIZE * zoom)
+	var total_height = int(map_height * TILE_SIZE * zoom)
+
+	# Horizontal scrollbar background
+	draw_rect(Rect2(start_x, start_y + canvas_height, canvas_width, scrollbar_height), Color(0.15, 0.15, 0.15))
+
+	# Horizontal scrollbar thumb
+	if total_width > canvas_width:
+		var thumb_width = max(20, int(canvas_width * canvas_width / total_width))
+		var thumb_x = start_x + int(scroll_x * canvas_width / total_width)
+		draw_rect(Rect2(thumb_x, start_y + canvas_height, thumb_width, scrollbar_height), Color(0.5, 0.5, 0.5))
+
+	# Vertical scrollbar background
+	draw_rect(Rect2(start_x + canvas_width, start_y, scrollbar_width, canvas_height), Color(0.15, 0.15, 0.15))
+
+	# Vertical scrollbar thumb
+	if total_height > canvas_height:
+		var thumb_height = max(20, int(canvas_height * canvas_height / total_height))
+		var thumb_y = start_y + int(scroll_y * canvas_height / total_height)
+		draw_rect(Rect2(start_x + canvas_width, thumb_y, scrollbar_width, thumb_height), Color(0.5, 0.5, 0.5))
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -215,11 +221,36 @@ func _input(event: InputEvent) -> void:
 			get_tree().root.set_input_as_handled()
 			return
 
+	var start_x = 220
+	var start_y = 30
+	var canvas_width = get_size().x - 220 - scrollbar_width
+	var canvas_height = get_size().y - 30 - scrollbar_height
+
 	if event is InputEventMouseButton and event.pressed:
 		var local_pos = event.position
-		if local_pos.x > 220 and local_pos.y > 30:
-			var grid_x = int((local_pos.x - 220 + scroll_x) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - 30 + scroll_y) / (TILE_SIZE * zoom))
+
+		# Check if clicking on horizontal scrollbar
+		if local_pos.y >= start_y + canvas_height and local_pos.y < start_y + canvas_height + scrollbar_height:
+			if local_pos.x >= start_x and local_pos.x < start_x + canvas_width:
+				var total_width = int(map_width * TILE_SIZE * zoom)
+				scroll_x = int((local_pos.x - start_x) * total_width / canvas_width)
+				scroll_x = clampi(scroll_x, 0, max(0, total_width - canvas_width))
+				queue_redraw()
+				return
+
+		# Check if clicking on vertical scrollbar
+		if local_pos.x >= start_x + canvas_width and local_pos.x < start_x + canvas_width + scrollbar_width:
+			if local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
+				var total_height = int(map_height * TILE_SIZE * zoom)
+				scroll_y = int((local_pos.y - start_y) * total_height / canvas_height)
+				scroll_y = clampi(scroll_y, 0, max(0, total_height - canvas_height))
+				queue_redraw()
+				return
+
+		# Normal canvas painting
+		if local_pos.x >= start_x and local_pos.x < start_x + canvas_width and local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
+			var grid_x = int((local_pos.x - start_x + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - start_y + scroll_y) / (TILE_SIZE * zoom))
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
 				if event.button_index == MOUSE_BUTTON_LEFT:
@@ -237,9 +268,9 @@ func _input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion and is_painting:
 		var local_pos = event.position
-		if local_pos.x > 220 and local_pos.y > 30:
-			var grid_x = int((local_pos.x - 220 + scroll_x) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - 30 + scroll_y) / (TILE_SIZE * zoom))
+		if local_pos.x >= start_x and local_pos.x < start_x + canvas_width and local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
+			var grid_x = int((local_pos.x - start_x + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - start_y + scroll_y) / (TILE_SIZE * zoom))
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
 				grid[grid_y][grid_x] = selected_density
@@ -370,34 +401,8 @@ func _save_map() -> void:
 	file.store_string(JSON.stringify(map_data))
 
 func _update_scrollbars() -> void:
-	if not h_scrollbar or not v_scrollbar:
-		return
-
-	var canvas_width = get_size().x - 220 - 15  # 220 for panel, 15 for v-scrollbar
-	var canvas_height = get_size().y - 30 - 15  # 30 for status, 15 for h-scrollbar
-
-	var total_width = int(map_width * TILE_SIZE * zoom)
-	var total_height = int(map_height * TILE_SIZE * zoom)
-
-	# Update horizontal scrollbar
-	h_scrollbar.min_value = 0
-	h_scrollbar.max_value = max(0, total_width - canvas_width)
-	h_scrollbar.page = canvas_width
-	h_scrollbar.value = scroll_x
-
-	# Update vertical scrollbar
-	v_scrollbar.min_value = 0
-	v_scrollbar.max_value = max(0, total_height - canvas_height)
-	v_scrollbar.page = canvas_height
-	v_scrollbar.value = scroll_y
-
-func _on_h_scroll(value: float) -> void:
-	scroll_x = int(value)
-	queue_redraw()
-
-func _on_v_scroll(value: float) -> void:
-	scroll_y = int(value)
-	queue_redraw()
+	# Scrollbar ranges are calculated in _draw and input handling
+	pass
 
 func _save_state() -> void:
 	# Remove any states after current index (if we undid and made new changes)
