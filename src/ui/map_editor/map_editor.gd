@@ -51,6 +51,11 @@ func _setup_ui() -> void:
 	clear_btn.pressed.connect(_clear_map)
 	toolbar.add_child(clear_btn)
 
+	var border_btn := Button.new()
+	border_btn.text = "Add Border"
+	border_btn.pressed.connect(_add_border)
+	toolbar.add_child(border_btn)
+
 	var save_btn := Button.new()
 	save_btn.text = "Save Map"
 	save_btn.pressed.connect(_save_map)
@@ -79,6 +84,17 @@ func _clear_map() -> void:
 	_init_grid()
 	queue_redraw()
 	status_label.text = "Map cleared"
+
+func _add_border() -> void:
+	# Add bone border around all edges
+	for x in range(map_width):
+		grid[0][x] = "bone"
+		grid[map_height - 1][x] = "bone"
+	for y in range(map_height):
+		grid[y][0] = "bone"
+		grid[y][map_width - 1] = "bone"
+	queue_redraw()
+	status_label.text = "Border added"
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
