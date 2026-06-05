@@ -1,321 +1,309 @@
 # v0.0.2 — Map Editor Analysis
 
-**Status:** Analysis (pre-plan)
+**Status:** Analysis (requirements based on simulator code review)
 
 ---
 
-## 1. Overview
+## 1. Simulator Foundation
 
-The nano-bot game requires a way to create maps. Currently, maps are hand-crafted JSON files, which is:
-- Difficult to visualize
-- Error-prone (invalid data, missing elements)
-- Time-consuming to modify
-- Impossible to preview without loading the simulator
+This analysis is based on examining the actual simulator code (MapData, MapLoader, MapRenderer) to understand the exact data model, formats, and visual rendering.
 
-**Purpose of this analysis:** Define what a map editor must do, what constraints exist, and what questions must be answered before implementation.
-
-**Key constraint:** The UI should be consistent with the simulator's visual style and layout, so users recognize the same map format in both the editor and the game.
+**Key Files Reviewed:**
+- `src/core/map_data.gd` - Data structure and cell model
+- `src/core/map_loader.gd` - JSON format and loading
+- `src/ui/playback/map_renderer.gd` - Exact visual rendering
 
 ---
 
-## 2. Problem Statement
+## 2. Data Model (From Simulator)
 
-### What Is a Map?
-A map is a 2D grid where:
-- Each cell has a **terrain density** (low, medium, high, bone)
-- Some cells have a **bloodstream direction** (north, south, east, west, or bidirectional)
-- Elements are placed at specific cells:
-  - **Habitas points** (scoring locations)
-  - **AZN nodes** (resource locations with quantity)
-  - **Injection zones** (rectangular areas where players spawn)
+### Cell Structure
+Each map cell has TWO independent properties:
 
-### What's Needed?
-A tool that allows a human to:
-1. Create a map from scratch
-2. Modify existing maps
-3. Visualize what they're creating
-4. Save the result in a format the game understands
-5. Load previously saved maps for editing
+```
+Cell {
+  density: Density enum     # LOW, MEDIUM, HIGH, BONE
+  stream_dir: StreamDir enum # NONE, NORTH, SOUTH, EAST, WEST
+}
+```
 
-### Why Previous Attempts Failed
-1. Copied game UI into editor (editors and games are different tools)
-2. Buttons didn't do what users expected (unclear interaction model)
-3. Layout was arbitrary (85/15 split based on simulator, not editing patterns)
-4. No clear workflows (how does a user actually create a map?)
-5. Confusion between display and creation (showing arrows vs placing bloodstreams)
+**Critical:** Stream direction does NOT change terrain density. They are separate.
+
+### Map Collections
+
+```
+MapData {
+  width: int (60-80)
+  height: int (60-80)
+  
+  habitas_points: Array[Vector2i]           # Just positions
+  azn_nodes: Array[{position: Vector2i, quantity: int}]
+  injection_zones: Array[{player: int, rect: Rect2i}]
+  _cells: Array[{density, stream_dir}]      # Flat array: cells[y*width+x]
+}
+```
+
+### Density Enum Values
+```
+Density {
+  LOW = 0,
+  MEDIUM = 1,
+  HIGH = 2,
+  BONE = 3
+}
+```
+
+### StreamDir Enum Values
+```
+StreamDir {
+  NONE = 0,
+  NORTH = 1,
+  SOUTH = 2,
+  EAST = 3,
+  WEST = 4
+}
+```
+
+(Note: Not stored as strings in simulator, but as integers)
 
 ---
 
-## 3. Requirements Inventory
+## 3. JSON Format (Loader)
 
-### REQ-1: Core Map Editing
-The editor must allow users to:
-- **REQ-1.1** Select a terrain density (low, medium, high, bone)
-- **REQ-1.2** Paint single cells by clicking
-- **REQ-1.3** Paint multiple cells by dragging
-- **REQ-1.4** Fill connected regions (right-click flood-fill)
-- **REQ-1.5** View their changes immediately (no confirmation)
+### Density Mapping
+String → Enum
+```
+"low"    → Density.LOW
+"medium" → Density.MEDIUM
+"high"   → Density.HIGH
+"bone"   → Density.BONE
+```
 
-### REQ-2: Element Placement
-The editor must allow users to place all map elements:
-- **REQ-2.1** Bloodstreams (with directional indication: N, S, E, W, N-S, E-W)
-- **REQ-2.2** Habitas points (one per cell)
-- **REQ-2.3** AZN nodes (with quantity)
-- **REQ-2.4** Injection zones (rectangular areas with player assignment)
+### Stream Mapping
+String → Enum
+```
+"north" → StreamDir.NORTH
+"south" → StreamDir.SOUTH
+"east"  → StreamDir.EAST
+"west"  → StreamDir.WEST
+(missing) → StreamDir.NONE
+```
 
-### REQ-3: Map Display
-The editor must display maps such that:
-- **REQ-3.1** Terrain is visible with sprites or fallback colors
-- **REQ-3.2** Bloodstreams are shown as directional indicators
-- **REQ-3.3** Elements are visually distinct (habitas, AZN, zones)
-- **REQ-3.4** Grid structure is clear (tile boundaries visible)
-- **REQ-3.5** Visual appearance is consistent with the simulator (same colors, sprites, layout understanding)
+### Cell Object (in JSON)
+```json
+{
+  "x": integer,
+  "y": integer,
+  "density": "low" | "medium" | "high" | "bone",
+  "stream": "north" | "south" | "east" | "west"  (optional, omit if NONE)
+}
+```
 
-### REQ-4: Navigation for Large Maps
-The editor must handle maps up to 80×80 tiles:
-- **REQ-4.1** Zoom in/out (range 0.5x to 3.0x)
-- **REQ-4.2** Pan view (scroll to see different parts)
-- **REQ-4.3** Scrollbars visible when needed
+### Habitas Points
+```json
+{
+  "x": integer,
+  "y": integer
+}
+```
+
+### AZN Nodes
+```json
+{
+  "x": integer,
+  "y": integer,
+  "quantity": integer (default 10)
+}
+```
+
+### Injection Zones
+```json
+{
+  "player": 0 | 1,
+  "x1": integer,
+  "y1": integer,
+  "x2": integer,
+  "y2": integer
+}
+```
+
+Note: Rectangle is inclusive on both ends (x1 to x2 inclusive, not x2-exclusive)
+
+---
+
+## 4. Visual Rendering (From MapRenderer)
+
+### Constants
+```
+CELL_SIZE = 16 pixels
+
+STREAM_COLOR = Color(0.70, 0.25, 0.25, 0.80)  # Reddish-brown
+```
+
+### Terrain Textures
+```
+tile_low.png     (light/salmon color)
+tile_medium.png  (purple/violet)
+tile_high.png    (dark purple)
+tile_bone.png    (very dark/black)
+```
+
+### Stream Textures
+```
+tile_stream_h.png  (horizontal stream background)
+tile_stream_v.png  (vertical stream background)
+```
+
+### Element Textures
+```
+habitas_neutral.png  (gold/orange marker)
+habitas_owned.png    (marker with owner tint)
+azn_node.png         (yellow circle marker)
+```
+
+### Rendering Algorithm
+
+```
+For each cell (x, y):
+  if stream_dir == NONE:
+    // Draw terrain
+    draw_texture(TILE_TEX[density], position, size)
+  else:
+    // Draw stream cell
+    if stream_dir is EAST or WEST:
+      draw_texture(STREAM_TEX_H, position, size)
+    else:  // NORTH or SOUTH
+      draw_texture(STREAM_TEX_V, position, size)
+    
+    // Overlay procedural arrow
+    center = cell_center
+    direction_vector = stream_to_vec(stream_dir)
+    arrow_length = CELL_SIZE * 0.5 - 3.5
+    
+    // Draw arrow shaft
+    draw_line(center - direction_vector * arrow_length * 0.5,
+              center + direction_vector * arrow_length,
+              STREAM_COLOR, 1.5)
+    
+    // Draw arrowhead (2 lines forming V)
+    perpendicular = rotate_90(direction_vector) * 2.5
+    arrow_tip = center + direction_vector * arrow_length
+    draw_line(arrow_tip, arrow_tip - direction_vector * 3.5 + perpendicular, STREAM_COLOR, 1.5)
+    draw_line(arrow_tip, arrow_tip - direction_vector * 3.5 - perpendicular, STREAM_COLOR, 1.5)
+```
+
+**Key Point:** Stream texture provides background, procedural arrow provides clarity.
+
+### Direction Vectors
+```
+NORTH: Vector2( 0, -1)
+SOUTH: Vector2( 0,  1)
+EAST:  Vector2( 1,  0)
+WEST:  Vector2(-1,  0)
+```
+
+### Grid Lines
+```
+Color = Color(0.00, 0.00, 0.00, 0.12)  // Very subtle black
+Drawn as outline rect for each cell
+```
+
+---
+
+## 5. Requirements (Based on Findings)
+
+### REQ-1: Terrain Editing
+- Select from 4 densities: LOW, MEDIUM, HIGH, BONE
+- Paint single cell (left-click)
+- Paint continuous path (left-click + drag)
+- Flood-fill connected region (right-click)
+- Terrain density is INDEPENDENT of streams
+
+### REQ-2: Stream Placement
+- Place stream on a cell with specific direction: N/S/E/W
+- Stream is METADATA, doesn't change terrain density
+- Stream can be placed on any density cell
+- Editor must handle NONE state (no stream on cell)
+
+### REQ-3: Element Placement
+- Habitas points: click to place at grid position
+- AZN nodes: click to place, can specify quantity
+- Injection zones: drag rectangle to define area, specify player (0 or 1)
+
+### REQ-4: Map Display
+- Terrain grid with correct colors and sprites
+- Stream cells show stream texture + procedural arrow overlay
+- Elements displayed as markers
+- Grid lines visible
 
 ### REQ-5: File Operations
-The editor must support:
-- **REQ-5.1** Load existing maps from res://maps/ directory (for editing or as templates)
-- **REQ-5.2** Save current map with user-specified filename (Save As)
-- **REQ-5.3** Prevent accidental overwrites (confirm if filename exists)
-- **REQ-5.4** Clear map to start over
+- Load map from JSON (parse format exactly as specified)
+- Save map to JSON (generate format exactly as specified)
+- Round-trip guarantee: load → edit → save → load produces identical results
 
-### REQ-5.5: Element Modification (Post-Placement)
-The editor must allow users to:
-- **REQ-5.5a** Select placed elements on the canvas
-- **REQ-5.5b** View selected element properties (position, type, parameters)
-- **REQ-5.5c** Edit element properties (e.g., AZN quantity)
-- **REQ-5.5d** Delete selected elements
+### REQ-6: Navigation
+- Zoom: 0.5x to 3.0x (match simulator zoom range)
+- Pan: middle-click drag or scrollbars
+- Large maps up to 80x80 must be navigable
 
-### REQ-6: Undo/History
-The editor must support:
-- **REQ-6.1** Undo last action
-- **REQ-6.2** Undo works for all operations (painting, placement, fill)
-- **REQ-6.3** Keep history of at least 20-50 states
-
-### REQ-7: Data Format
-The editor must:
-- **REQ-7.1** Use same JSON format as existing maps
-- **REQ-7.2** Save valid JSON that the simulator can load
-- **REQ-7.3** Support round-trip (load → edit → save → load again)
+### REQ-7: Undo/History
+- Undo full state (terrain + streams + elements)
+- Keep 20-50 states
 
 ### REQ-8: User Feedback
-The editor must provide feedback:
-- **REQ-8.1** Clear indication of what tool is active
-- **REQ-8.2** Show what will happen before it happens
-- **REQ-8.3** Confirmation for destructive operations (clear, load over unsaved)
-- **REQ-8.4** Grid coordinates on hover (for precision placement)
-
-### REQ-9: Map Validation
-The editor must validate maps before saving:
-- **REQ-9.1** Warn if map has no habitas points (game requires at least 1)
-- **REQ-9.2** Warn if map has no injection zones (game requires spawn areas)
-- **REQ-9.3** Warn if map has no AZN nodes (game requires resources)
-- **REQ-9.4** Warnings are advisory (don't block save, just inform user)
-- **REQ-9.5** Display warnings in UI before saving
+- Status bar showing current tool
+- Coordinate display on hover
+- Confirmation for destructive operations
+- Validation warnings before save
 
 ---
 
-## 4. Constraints
+## 6. Critical Differences from Previous Implementation
 
-### Technical Constraints
-- **CONST-1:** Built in Godot 4.6 with GDScript
-- **CONST-2:** Tile size is fixed at 16 pixels
-- **CONST-3:** Maps are 60×60 to 80×80 tiles (not larger)
-- **CONST-4:** JSON format must match existing map structure exactly
-- **CONST-5:** UI must work on 1024×768 minimum resolution (1920×1080 recommended)
-
-### Scope Constraints
-- **CONST-6:** Editor is for creating maps only (not playing games)
-- **CONST-7:** No simulation or game mechanics in editor
-- **CONST-8:** No network/multiplayer features
-- **CONST-9:** Desktop only (not web)
-
-### Design Constraints
-- **CONST-10:** UI should be consistent with simulator visual style
-- **CONST-11:** Maps created in editor must work exactly like hand-crafted maps
-- **CONST-12:** No UI themes or complex styling (keep simple)
+| Previous | Correct |
+|----------|---------|
+| Bloodstreams in separate array | Stream is property of cell |
+| Stream changes terrain density | Stream is independent metadata |
+| Full tile rendering for streams | Stream texture + arrow overlay |
+| String direction names | Integer enum values |
+| Wrong arrow rendering | Procedural arrowhead with shaft |
 
 ---
 
-## 5. Data Model Requirements
+## 7. Implementation Constraints
 
-### Map Structure (What Gets Saved)
-```
-Map:
-  - name: string
-  - width: integer (60-80)
-  - height: integer (60-80)
-  - default_density: "low"
-  - cells: array of
-    - x, y: position
-    - density: "low" | "medium" | "high" | "bone"
-    - stream: (optional) "north" | "south" | "east" | "west" | "ns" | "ew"
-  - habitas_points: array of {x, y}
-  - azn_nodes: array of {x, y, quantity}
-  - injection_zones: array of {player: 0|1, x1, y1, x2, y2}
-```
-
-### Runtime State (What Editor Tracks)
-- Current grid (terrain density for each cell)
-- Current bloodstreams (position + direction)
-- Current elements (habitas, AZN, zones)
-- Current selection (what's active: terrain type, element type)
-- History (previous states for undo)
-- View state (zoom level, pan position)
+- **CONST-1:** StreamDir is enum (integer), not string
+- **CONST-2:** Each cell has density AND stream_dir both set independently
+- **CONST-3:** Stream textures must be used (tile_stream_h.png, tile_stream_v.png)
+- **CONST-4:** Arrow drawn with 3 lines (shaft + 2 arrowhead lines), not primitive arrow
+- **CONST-5:** Arrow color must be exactly Color(0.70, 0.25, 0.25, 0.80)
+- **CONST-6:** Flat cell array indexed as cells[y * width + x]
+- **CONST-7:** JSON format must match loader expectations exactly
 
 ---
 
-## 6. User Workflows
+## 8. Success Criteria
 
-### Workflow A: Create New Map
-1. User opens editor (blank 60×60 map)
-2. Selects terrain density
-3. Clicks/drags to paint terrain
-4. Switches to elements
-5. Places bloodstreams, habitas points, AZN nodes
-6. Creates injection zones
-7. Saves map as JSON
-
-### Workflow B: Edit Existing Map
-1. User opens editor
-2. Uses Load button to select map from list
-3. Map displays with all elements
-4. Modifies terrain and/or elements
-5. Uses Undo if needed
-6. Saves changes
-
-### Workflow C: Iterate on Map Balance
-1. User creates/loads map
-2. Looks at it in simulator (to see how it plays)
-3. Returns to editor to adjust
-4. Repeats until satisfied
+1. ✓ Load any existing map and display it correctly
+2. ✓ Terrain colors match simulator exactly
+3. ✓ Bloodstreams show as stream texture + procedural arrow (not full tiles)
+4. ✓ Arrow direction matches stream_dir value
+5. ✓ Can paint terrain without affecting streams
+6. ✓ Can place streams without affecting terrain
+7. ✓ Can place all element types
+8. ✓ Saved JSON loads identically in simulator
+9. ✓ Round-trip test: load → edit → save → load produces same result
+10. ✓ UI layout matches simulator proportions
 
 ---
 
-## 7. Key Questions - ANSWERED
+## 9. Next: Plan Phase
 
-### Q1: UI Layout
-**DECISION: Consistent with simulator**
-- Match simulator's visual style and proportions
-- Users should recognize the same map format in both editor and game
-- Exact proportions (85/15, 70/30, etc.) determined during planning phase
+With actual requirements documented, plan.md should specify:
+- Phase 1: Canvas with correct terrain + stream rendering
+- Phase 2: Editing tools (paint, fill)
+- Phase 3: Element placement
+- Phase 4: File I/O
+- Phase 5: Polish
 
-### Q2: Element Editing
-**DECISION: YES - Users can modify elements after placing**
-- Users can select placed elements
-- Users can edit properties (e.g., change AZN quantity)
-- Users can delete elements
-- Requires: Selection mechanism, properties display, delete action
-
-### Q3: Validation
-**DECISION: YES - Add validation warnings**
-- Editor should warn about potential issues
-- Rules to enforce:
-  - At least 1 habitas point (game requires scoring location)
-  - At least 1 injection zone per player (game requires spawn area)
-  - At least 1 AZN node (game requires resources)
-- Warnings are advisory (don't block save, just inform user)
-
-### Q4: Coordinate Display
-**DECISION: YES - Show coordinates on hover**
-- Display grid coordinates (x, y) when user hovers over cells
-- Location: Status bar or tooltip
-- Helps with precision placement and communication ("place at 32,45")
-
-### Q5: Map Templates
-**DECISION: Use existing maps as templates**
-- No pre-made templates
-- User can load any existing map from res://maps/
-- Edit the loaded map
-- Save under a NEW name (not overwrite original)
-- This lets users reuse and modify good map designs
-
-### ADDITIONAL: Save With Any Name
-**REQUIREMENT: Support "Save As"**
-- When saving, user can specify any filename
-- Saves to user://maps/{filename}.json (or res://maps/ if appropriate)
-- Can save over existing maps or create new ones
-- Prevents accidental overwrite (confirm if filename exists)
-- Users can keep original and create variations
-
----
-
-## 8. Risks
-
-| Risk | Severity | Mitigation |
-|---|---|---|
-| **Coordinate math errors** - clicks paint wrong cells | High | Thorough testing at various zoom/pan positions |
-| **JSON format mismatch** - saved maps don't load in simulator | High | Validate against existing map structure, test round-trip |
-| **Performance issues** - large maps lag | Medium | Profile with 80×80 maps, optimize if needed |
-| **Undo state bloat** - history consumes too much memory | Low | Limit history to 50 states |
-| **Confusing UI** - users don't understand how to use tools | Medium | Clear button labels, status feedback, help text |
-| **Data loss** - user unsaved changes lost on crash | Low | Auto-save every N minutes |
-
----
-
-## 9. Success Criteria
-
-The editor is done when:
-1. ✓ User can paint all four terrain densities
-2. ✓ User can flood-fill regions with right-click
-3. ✓ User can place all element types
-4. ✓ User can select and modify placed elements (edit properties, delete)
-5. ✓ User can load existing maps (for editing or as templates)
-6. ✓ User can save maps with custom names (Save As)
-7. ✓ User can't accidentally overwrite without confirmation
-8. ✓ Map validation warnings display (at least 1 habitas, zone, AZN)
-9. ✓ Grid coordinates display on hover
-10. ✓ Saved maps load and work in simulator
-11. ✓ Undo reverts changes correctly
-12. ✓ Zoom/pan work smoothly
-13. ✓ No crashes or data corruption
-14. ✓ UI is consistent with simulator style
-15. ✓ User can complete all workflows in under 5 minutes per map
-
----
-
-## 10. Implementation Dependencies
-
-These must be understood before planning:
-
-| Item | Depends On | Notes |
-|---|---|---|
-| Terrain painting | Grid rendering, coordinate math | Core feature |
-| Element placement | Grid rendering, element arrays | Requires each element type |
-| Zoom/Pan | Canvas rendering, scrollbar math | Essential for large maps |
-| Save/Load | JSON serialization, file system | Must match simulator format |
-| Undo | State snapshots | Must preserve full grid + elements |
-| File dialog | Directory listing, map loading | UX: user-friendly selection |
-
----
-
-## 11. What's NOT in Scope
-
-- ❌ Map validation (checking if map is playable)
-- ❌ Import/export to other formats
-- ❌ Multiplayer editing
-- ❌ Map templates or wizards
-- ❌ Terrain automation (procedural generation)
-- ❌ Replay/playback of maps
-- ❌ Detailed error messages (beyond "save failed")
-
----
-
-## 12. Open Questions for Planning Phase
-
-Before moving to `plan.md`, these need decisions:
-
-1. **UI Layout Decision** - Which proportion (85/15, 70/30, 60/40)?
-2. **Element Editing** - Can users modify after placing?
-3. **Validation Rules** - What should editor warn about?
-4. **Coordinate Display** - Show grid coords on hover?
-5. **Starting State** - Blank only, or offer templates?
-6. **Status Feedback** - What information is essential?
-7. **Performance Target** - Acceptable FPS and load time?
-8. **File Storage** - res://maps/ or user://maps/?
-
+All based on actual simulator behavior, not assumptions.
