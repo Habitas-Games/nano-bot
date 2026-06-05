@@ -14,16 +14,16 @@ const MAX_HISTORY: int = 50
 # Map data
 var map_width: int = DEFAULT_WIDTH
 var map_height: int = DEFAULT_HEIGHT
-var grid: Array[Array[String]] = []
+var grid: Array = []
 
 # Map elements
-var habitas_points: Array[Dictionary] = []
-var azn_nodes: Array[Dictionary] = []
-var injection_zones: Array[Dictionary] = []
-var bloodstreams: Array[Dictionary] = []
+var habitas_points: Array = []
+var azn_nodes: Array = []
+var injection_zones: Array = []
+var bloodstreams: Array = []
 
 # Sprites
-var sprites: Dictionary[String, Texture2D] = {}
+var sprites: Dictionary = {}
 
 # View state
 var zoom: float = 1.0
@@ -44,7 +44,7 @@ var is_painting: bool = false
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
 
 # History
-var history: Array[Array[Array[String]]] = []
+var history: Array = []
 var history_index: int = -1
 
 # Element editing
@@ -518,7 +518,7 @@ func _on_canvas_mouse_exited() -> void:
 
 func _is_in_canvas(pos: Vector2, canvas_pos: Vector2, canvas_size: Vector2) -> bool:
 	return pos.x >= canvas_pos.x and pos.x < canvas_pos.x + canvas_size.x and \
-	       pos.y >= canvas_pos.y and pos.y < canvas_pos.y + canvas_size.y
+		   pos.y >= canvas_pos.y and pos.y < canvas_pos.y + canvas_size.y
 
 func _show_load_dialog() -> void:
 	"""Show load dialog"""
@@ -690,7 +690,7 @@ func _save_state() -> void:
 	if history_index < history.size() - 1:
 		history.resize(history_index + 1)
 
-	var state: Array[Array[String]] = []
+	var state: Array = []
 	for row in grid:
 		state.append(row.duplicate())
 	history.append(state)
