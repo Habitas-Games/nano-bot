@@ -309,7 +309,7 @@ func _show_load_dialog() -> void:
 		popup.queue_free()
 	)
 
-	popup.popup_rect(Rect2(get_global_mouse_position(), Vector2(200, 100)))
+	popup.popup_centered_ratio(0.3)
 
 func _load_first_map() -> void:
 	var dir = DirAccess.open("res://maps/")
