@@ -28,7 +28,7 @@ var injection_zones: Array = []
 var zoom: float = 1.0
 var scroll_x: int = 0
 var scroll_y: int = 0
-var canvas_rect: Rect2 = Rect2.ZERO
+var canvas_rect: Rect2 = Rect2()
 
 # Constants
 const STREAM_COLOR := Color(0.70, 0.25, 0.25, 0.80)
