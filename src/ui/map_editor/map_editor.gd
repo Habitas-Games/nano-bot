@@ -16,6 +16,9 @@ var scroll_y: int = 0
 
 var sprites: Dictionary = {}
 var terrain_buttons: Dictionary = {}
+var history: Array = []
+var history_index: int = -1
+const MAX_HISTORY: int = 50
 
 func _ready() -> void:
 	_load_sprites()
@@ -110,6 +113,11 @@ func _setup_ui() -> void:
 	clear_btn.pressed.connect(_clear_map)
 	panel.add_child(clear_btn)
 
+	var undo_btn := Button.new()
+	undo_btn.text = "↶ Undo"
+	undo_btn.pressed.connect(_undo)
+	panel.add_child(undo_btn)
+
 	var save_btn := Button.new()
 	save_btn.text = "💾 Save Map"
 	save_btn.pressed.connect(_save_map)
@@ -195,10 +203,12 @@ func _input(event: InputEvent) -> void:
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
 				if event.button_index == MOUSE_BUTTON_LEFT:
+					_save_state()
 					is_painting = true
 					grid[grid_y][grid_x] = selected_density
 					queue_redraw()
 				elif event.button_index == MOUSE_BUTTON_RIGHT:
+					_save_state()
 					_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
 					queue_redraw()
 
@@ -237,10 +247,12 @@ func _input(event: InputEvent) -> void:
 				get_tree().root.set_input_as_handled()
 
 func _clear_map() -> void:
+	_save_state()
 	_init_grid()
 	queue_redraw()
 
 func _add_border() -> void:
+	_save_state()
 	for x in range(map_width):
 		grid[0][x] = "bone"
 		grid[map_height - 1][x] = "bone"
@@ -306,6 +318,10 @@ func _load_map(filename: String) -> void:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
 		scroll_x = 0
 		scroll_y = 0
+		# Reset history for new map
+		history.clear()
+		history_index = -1
+		_save_state()  # Save initial state
 		queue_redraw()
 
 func _save_map() -> void:
@@ -331,6 +347,33 @@ func _save_map() -> void:
 	}
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
+
+func _save_state() -> void:
+	# Remove any states after current index (if we undid and made new changes)
+	if history_index < history.size() - 1:
+		history.resize(history_index + 1)
+
+	# Save current grid state
+	var state = []
+	for row in grid:
+		state.append(row.duplicate())
+
+	history.append(state)
+	history_index = history.size() - 1
+
+	# Limit history size
+	if history.size() > MAX_HISTORY:
+		history.pop_front()
+		history_index -= 1
+
+func _undo() -> void:
+	if history_index > 0:
+		history_index -= 1
+		# Restore grid from history
+		grid.clear()
+		for row in history[history_index]:
+			grid.append(row.duplicate())
+		queue_redraw()
 
 func _flood_fill(start_x: int, start_y: int, target: String) -> void:
 	if start_x < 0 or start_x >= map_width or start_y < 0 or start_y >= map_height:
