@@ -120,6 +120,12 @@ func _build_ui() -> void:
 	tourn_btn.pressed.connect(func(): get_tree().change_scene_to_file(TOURNAMENT_SCENE))
 	center.add_child(tourn_btn)
 
+	# Map Editor
+	var editor_btn := _make_button("🗺️  Map Editor", Color(0.80, 0.60, 0.20))
+	editor_btn.tooltip_text = "Create and edit maps visually. Paint terrain, bloodstreams, and resources."
+	editor_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/map_editor_scene.tscn"))
+	center.add_child(editor_btn)
+
 	center.add_child(_spacer(6))
 
 	# Status label
