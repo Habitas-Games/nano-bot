@@ -260,18 +260,54 @@ func _draw() -> void:
 			var density = grid[y][x]
 			var color = Color.WHITE
 
-			match density:
-				"low": color = Color(0.8, 0.6, 0.6)
-				"medium": color = Color(0.7, 0.5, 0.7)
-				"high": color = Color(0.5, 0.2, 0.5)
-				"bone": color = Color(0.2, 0.2, 0.2)
+			# Check if this cell has a bloodstream
+			var has_stream = false
+			var stream_direction = ""
+			for stream in bloodstreams:
+				if stream["x"] == x and stream["y"] == y:
+					has_stream = true
+					stream_direction = stream["stream"]
+					break
 
-			if sprites.get(density):
+			# Use cyan for bloodstream cells, otherwise use density color
+			if has_stream:
+				color = Color(0.0, 1.0, 1.0, 0.7)  # Cyan for streams
+			else:
+				match density:
+					"low": color = Color(0.8, 0.6, 0.6)
+					"medium": color = Color(0.7, 0.5, 0.7)
+					"high": color = Color(0.5, 0.2, 0.5)
+					"bone": color = Color(0.2, 0.2, 0.2)
+
+			if sprites.get(density) and not has_stream:
 				draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
 			else:
 				draw_rect(Rect2(screen_x, screen_y, size, size), color)
 
+			# Draw grid outline
 			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
+
+			# Draw direction arrow on bloodstream cells
+			if has_stream:
+				var center_x = screen_x + size / 2
+				var center_y = screen_y + size / 2
+				var arrow_size = 4 * zoom
+				var arrow_color = Color.WHITE
+				match stream_direction:
+					"north":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y - arrow_size), arrow_color, 2)
+					"south":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y + arrow_size), arrow_color, 2)
+					"east":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x + arrow_size, center_y), arrow_color, 2)
+					"west":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x - arrow_size, center_y), arrow_color, 2)
+					"ns":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y - arrow_size), arrow_color, 2)
+						draw_line(Vector2(center_x, center_y), Vector2(center_x, center_y + arrow_size), arrow_color, 2)
+					"ew":
+						draw_line(Vector2(center_x, center_y), Vector2(center_x - arrow_size, center_y), arrow_color, 2)
+						draw_line(Vector2(center_x, center_y), Vector2(center_x + arrow_size, center_y), arrow_color, 2)
 
 	# Draw injection zones
 	for zone in injection_zones:
@@ -299,30 +335,6 @@ func _draw() -> void:
 		var screen_y = start_y + (node["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
 		var radius = 4 * zoom
 		draw_circle(Vector2(screen_x, screen_y), radius, Color.YELLOW)
-
-	# Draw bloodstreams
-	for stream in bloodstreams:
-		var screen_x = start_x + (stream["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
-		var screen_y = start_y + (stream["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
-		var arrow_size = 5 * zoom
-		var direction = stream.get("stream", "")
-		var arrow_color = Color.CYAN
-		var line_width = 2.0
-		match direction:
-			"north":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, line_width)
-			"south":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, line_width)
-			"east":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, line_width)
-			"west":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, line_width)
-			"ns":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, line_width)
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, line_width)
-			"ew":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, line_width)
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, line_width)
 
 	# Draw scrollbars
 	var total_width = int(map_width * TILE_SIZE * zoom)
