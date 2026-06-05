@@ -43,48 +43,56 @@ func _setup_ui() -> void:
 	main.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(main)
 
-	# LEFT PANEL
+	# LEFT PANEL - with background
+	var panel_bg := PanelContainer.new()
+	panel_bg.custom_minimum_size = Vector2(220, 0)
+	main.add_child(panel_bg)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.15, 0.15, 0.15)
+	panel_bg.add_theme_stylebox_override("panel", panel_style)
+
 	var panel := VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(200, 0)
-	panel.add_theme_constant_override("separation", 8)
-	main.add_child(panel)
+	panel.add_theme_constant_override("separation", 12)
+	panel_bg.add_child(panel)
 
 	# Title
 	var title := Label.new()
 	title.text = "Map Editor"
-	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_font_size_override("font_size", 18)
 	panel.add_child(title)
 
-	panel.add_child(Label.new())  # Spacer
-
-	# Tile selector
+	# Terrain section
 	var tile_title := Label.new()
-	tile_title.text = "Terrain:"
-	tile_title.add_theme_font_size_override("font_size", 12)
+	tile_title.text = "Terrain"
+	tile_title.add_theme_font_size_override("font_size", 13)
 	panel.add_child(tile_title)
 
-	var tile_container := VBoxContainer.new()
-	tile_container.add_theme_constant_override("separation", 4)
+	var tile_container := GridContainer.new()
+	tile_container.columns = 2
+	tile_container.add_theme_constant_override("h_separation", 4)
+	tile_container.add_theme_constant_override("v_separation", 4)
 	panel.add_child(tile_container)
 
 	for dens in ["low", "medium", "high", "bone"]:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(0, 40)
-		btn.text = "  " + dens.to_upper()
+		btn.custom_minimum_size = Vector2(100, 50)
+		btn.text = dens.to_upper()
 		btn.toggle_mode = true
 		btn.pressed.connect(func():
 			selected_density = dens
+			_update_button_states(panel)
 		)
 		tile_container.add_child(btn)
 		if dens == "low":
 			btn.button_pressed = true
 
-	panel.add_child(Label.new())  # Spacer
+	panel.add_child(HSeparator.new())
 
 	# Tools section
 	var tools_title := Label.new()
-	tools_title.text = "Tools:"
-	tools_title.add_theme_font_size_override("font_size", 12)
+	tools_title.text = "Tools"
+	tools_title.add_theme_font_size_override("font_size", 13)
 	panel.add_child(tools_title)
 
 	var tools_container := VBoxContainer.new()
@@ -93,51 +101,54 @@ func _setup_ui() -> void:
 
 	var load_btn := Button.new()
 	load_btn.text = "📂 Load Map"
-	load_btn.custom_minimum_size = Vector2(0, 32)
+	load_btn.custom_minimum_size = Vector2(0, 36)
 	load_btn.pressed.connect(_load_map)
 	tools_container.add_child(load_btn)
 
 	var clear_btn := Button.new()
 	clear_btn.text = "🗑️  Clear"
-	clear_btn.custom_minimum_size = Vector2(0, 32)
+	clear_btn.custom_minimum_size = Vector2(0, 36)
 	clear_btn.pressed.connect(_clear_map)
 	tools_container.add_child(clear_btn)
 
 	var border_btn := Button.new()
 	border_btn.text = "⬜ Add Border"
-	border_btn.custom_minimum_size = Vector2(0, 32)
+	border_btn.custom_minimum_size = Vector2(0, 36)
 	border_btn.pressed.connect(_add_border)
 	tools_container.add_child(border_btn)
 
 	var save_btn := Button.new()
 	save_btn.text = "💾 Save Map"
-	save_btn.custom_minimum_size = Vector2(0, 32)
+	save_btn.custom_minimum_size = Vector2(0, 36)
 	save_btn.pressed.connect(_save_map)
 	tools_container.add_child(save_btn)
 
-	panel.add_child(Label.new())  # Spacer
+	panel.add_child(Control.new())  # Spacer
 
 	var back_btn := Button.new()
 	back_btn.text = "← Back to Menu"
-	back_btn.custom_minimum_size = Vector2(0, 32)
+	back_btn.custom_minimum_size = Vector2(0, 36)
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
 	panel.add_child(back_btn)
 
-	panel.add_child(Control.new())  # Fill rest
-
-	# RIGHT SIDE - Canvas + Status
+	# RIGHT SIDE - Canvas area
 	var canvas_section := VBoxContainer.new()
 	main.add_child(canvas_section)
 
 	# Status bar
-	var status_container := HBoxContainer.new()
-	status_container.custom_minimum_size = Vector2(0, 30)
-	canvas_section.add_child(status_container)
+	var status_bar_bg := PanelContainer.new()
+	status_bar_bg.custom_minimum_size = Vector2(0, 40)
+	canvas_section.add_child(status_bar_bg)
 
-	var status_label_left := Label.new()
-	status_label_left.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom | Middle-click to pan"
-	status_label_left.add_theme_font_size_override("font_size", 10)
-	status_container.add_child(status_label_left)
+	var status_style := StyleBoxFlat.new()
+	status_style.bg_color = Color(0.2, 0.2, 0.2)
+	status_bar_bg.add_theme_stylebox_override("panel", status_style)
+
+	var status_label := Label.new()
+	status_label.text = "Click & drag to paint | Right-click to fill | Scroll to zoom | Middle-click to pan"
+	status_label.add_theme_font_size_override("font_size", 11)
+	status_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	status_bar_bg.add_child(status_label)
 
 	# ScrollContainer for canvas
 	scroll_container = ScrollContainer.new()
@@ -151,6 +162,13 @@ func _setup_ui() -> void:
 	canvas.draw.connect(_on_canvas_draw)
 	canvas.gui_input.connect(_on_canvas_input)
 	scroll_container.add_child(canvas)
+
+func _update_button_states(panel: VBoxContainer) -> void:
+	var tile_container = panel.get_child(2)  # GridContainer
+	for i in range(tile_container.get_child_count()):
+		var btn = tile_container.get_child(i)
+		if btn is Button:
+			btn.button_pressed = (btn.text.to_lower() == selected_density.to_upper())
 
 func _on_canvas_draw() -> void:
 	for y in range(map_height):
@@ -171,16 +189,13 @@ func _on_canvas_draw() -> void:
 				"bone":
 					color = Color(0.2, 0.2, 0.2)
 
+			# Draw sprite if available, else colored rectangle
 			if sprites.get(density) != null:
-				canvas.draw_set_transform(screen_pos, 0, Vector2(1, 1))
-				canvas.draw_texture(sprites[density], Vector2.ZERO)
-				canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+				canvas.draw_texture(sprites[density], screen_pos)
 			else:
 				var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
 				canvas.draw_rect(rect, color)
-
-			var rect = Rect2(screen_pos, Vector2(screen_size, screen_size))
-			canvas.draw_rect(rect, Color.GRAY, false, 1.0)
+				canvas.draw_rect(rect, Color.GRAY, false, 1.0)
 
 func _on_canvas_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -235,12 +250,12 @@ func _on_canvas_input(event: InputEvent) -> void:
 				_flood_fill(x, y, grid[y][x])
 				canvas.queue_redraw()
 
-func _update_canvas_size() -> void:
-	canvas.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom + 100, map_height * TILE_SIZE * zoom + 100)
-
 func _get_grid_pos(screen_pos: Vector2) -> Vector2:
 	var local_pos = canvas.get_local_mouse_position()
 	return local_pos / TILE_SIZE
+
+func _update_canvas_size() -> void:
+	canvas.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom + 100, map_height * TILE_SIZE * zoom + 100)
 
 func _paint_at(screen_pos: Vector2) -> void:
 	var grid_pos = _get_grid_pos(screen_pos)
@@ -290,10 +305,10 @@ func _init_grid() -> void:
 		for x in range(map_width):
 			row.append("low")
 		grid.append(row)
+	canvas.queue_redraw()
 
 func _clear_map() -> void:
 	_init_grid()
-	canvas.queue_redraw()
 
 func _add_border() -> void:
 	for x in range(map_width):
