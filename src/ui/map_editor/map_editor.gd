@@ -11,17 +11,17 @@ var grid: Array = []
 var selected_density: String = "low"
 var zoom: float = 1.0
 var is_painting: bool = false
-var scroll_pos: Vector2 = Vector2.ZERO
+var scroll_x: int = 0
+var scroll_y: int = 0
 
 var sprites: Dictionary = {}
 var terrain_buttons: Dictionary = {}
-var scroll_container: ScrollContainer
-var canvas_control: Control
 
 func _ready() -> void:
 	_load_sprites()
 	_init_grid()
 	_setup_ui()
+	_load_first_map()
 
 func _load_sprites() -> void:
 	var sprite_paths = {
@@ -127,34 +127,36 @@ func _setup_ui() -> void:
 	root.add_child(right)
 
 	var status := Label.new()
-	status.text = "Click & drag to paint | Right-click to fill | Scroll to zoom"
+	status.text = "Click & drag to paint | Right-click to fill | Scroll to zoom | Arrow keys to scroll"
 	status.add_theme_font_size_override("font_size", 10)
 	right.add_child(status)
-
-	# ScrollContainer for canvas
-	scroll_container = ScrollContainer.new()
-	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	right.add_child(scroll_container)
-
-	# Canvas in scroll container
-	canvas_control = Control.new()
-	canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE, map_height * TILE_SIZE)
-	canvas_control.draw.connect(_on_canvas_draw)
-	canvas_control.gui_input.connect(_on_canvas_input)
-	scroll_container.add_child(canvas_control)
 
 func _select_density(dens: String) -> void:
 	selected_density = dens
 	for d in terrain_buttons.keys():
 		terrain_buttons[d].button_pressed = (d == dens)
 
-func _on_canvas_draw() -> void:
+func _draw() -> void:
+	# Draw background
+	draw_rect(Rect2(220, 30, get_size().x - 220, get_size().y - 30), Color(0.2, 0.2, 0.2))
+
+	# Draw grid
+	var start_x = 220
+	var start_y = 30
+	var canvas_width = get_size().x - 220
+	var canvas_height = get_size().y - 30
+
 	for y in range(map_height):
 		for x in range(map_width):
-			var screen_x = x * TILE_SIZE * zoom
-			var screen_y = y * TILE_SIZE * zoom
+			var screen_x = start_x + (x * TILE_SIZE * zoom) - scroll_x
+			var screen_y = start_y + (y * TILE_SIZE * zoom) - scroll_y
 			var size = TILE_SIZE * zoom
+
+			# Skip if off-screen
+			if screen_x + size < start_x or screen_x > get_size().x:
+				continue
+			if screen_y + size < start_y or screen_y > get_size().y:
+				continue
 
 			var density = grid[y][x]
 			var color = Color.WHITE
@@ -166,56 +168,77 @@ func _on_canvas_draw() -> void:
 				"bone": color = Color(0.2, 0.2, 0.2)
 
 			if sprites.get(density):
-				canvas_control.draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
+				draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
 			else:
-				canvas_control.draw_rect(Rect2(screen_x, screen_y, size, size), color)
+				draw_rect(Rect2(screen_x, screen_y, size, size), color)
 
-			canvas_control.draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
+			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
 
-func _on_canvas_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.1, 3.0)
-			canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
-			canvas_control.queue_redraw()
+			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = max(zoom - 0.1, 0.5)
-			canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
-			canvas_control.queue_redraw()
+			queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 
 	if event is InputEventMouseButton and event.pressed:
-		var local_pos = canvas_control.get_local_mouse_position()
-		var grid_x = int(local_pos.x / (TILE_SIZE * zoom))
-		var grid_y = int(local_pos.y / (TILE_SIZE * zoom))
+		var local_pos = event.position
+		if local_pos.x > 220 and local_pos.y > 30:
+			var grid_x = int((local_pos.x - 220 + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - 30 + scroll_y) / (TILE_SIZE * zoom))
 
-		if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				is_painting = true
-				grid[grid_y][grid_x] = selected_density
-				canvas_control.queue_redraw()
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
-				_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
-				canvas_control.queue_redraw()
+			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				if event.button_index == MOUSE_BUTTON_LEFT:
+					is_painting = true
+					grid[grid_y][grid_x] = selected_density
+					queue_redraw()
+				elif event.button_index == MOUSE_BUTTON_RIGHT:
+					_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
+					queue_redraw()
 
 	if event is InputEventMouseButton and not event.pressed:
 		is_painting = false
 
 	if event is InputEventMouseMotion and is_painting:
-		var local_pos = canvas_control.get_local_mouse_position()
-		var grid_x = int(local_pos.x / (TILE_SIZE * zoom))
-		var grid_y = int(local_pos.y / (TILE_SIZE * zoom))
+		var local_pos = event.position
+		if local_pos.x > 220 and local_pos.y > 30:
+			var grid_x = int((local_pos.x - 220 + scroll_x) / (TILE_SIZE * zoom))
+			var grid_y = int((local_pos.y - 30 + scroll_y) / (TILE_SIZE * zoom))
 
-		if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-			grid[grid_y][grid_x] = selected_density
-			canvas_control.queue_redraw()
+			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				grid[grid_y][grid_x] = selected_density
+				queue_redraw()
+
+	# Arrow keys for scrolling
+	if event is InputEventKey and event.pressed:
+		var scroll_speed = 20
+		match event.keycode:
+			KEY_LEFT:
+				scroll_x = max(0, scroll_x - scroll_speed)
+				queue_redraw()
+				get_tree().root.set_input_as_handled()
+			KEY_RIGHT:
+				scroll_x = min(int(map_width * TILE_SIZE * zoom - (get_size().x - 220)), scroll_x + scroll_speed)
+				queue_redraw()
+				get_tree().root.set_input_as_handled()
+			KEY_UP:
+				scroll_y = max(0, scroll_y - scroll_speed)
+				queue_redraw()
+				get_tree().root.set_input_as_handled()
+			KEY_DOWN:
+				scroll_y = min(int(map_height * TILE_SIZE * zoom - (get_size().y - 30)), scroll_y + scroll_speed)
+				queue_redraw()
+				get_tree().root.set_input_as_handled()
 
 func _clear_map() -> void:
 	_init_grid()
-	canvas_control.queue_redraw()
+	queue_redraw()
 
 func _add_border() -> void:
 	for x in range(map_width):
@@ -224,7 +247,7 @@ func _add_border() -> void:
 	for y in range(map_height):
 		grid[y][0] = "bone"
 		grid[y][map_width - 1] = "bone"
-	canvas_control.queue_redraw()
+	queue_redraw()
 
 func _show_load_dialog() -> void:
 	var dir = DirAccess.open("res://maps/")
@@ -241,8 +264,22 @@ func _show_load_dialog() -> void:
 	if files.is_empty():
 		return
 
-	# Load first map for now (simple approach)
 	_load_map(files[0])
+
+func _load_first_map() -> void:
+	var dir = DirAccess.open("res://maps/")
+	if not dir:
+		return
+	var files = []
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".json"):
+			files.append(file_name)
+		file_name = dir.get_next()
+
+	if not files.is_empty():
+		_load_map(files[0])
 
 func _load_map(filename: String) -> void:
 	var file = FileAccess.open("res://maps/" + filename, FileAccess.READ)
@@ -254,8 +291,9 @@ func _load_map(filename: String) -> void:
 		for cell in data.get("cells", []):
 			if "x" in cell and "y" in cell and cell["x"] < map_width and cell["y"] < map_height:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
-		canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
-		canvas_control.queue_redraw()
+		scroll_x = 0
+		scroll_y = 0
+		queue_redraw()
 
 func _save_map() -> void:
 	var cells = []
