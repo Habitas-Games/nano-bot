@@ -22,6 +22,16 @@ const MAX_HISTORY: int = 50
 var scrollbar_height: int = 15
 var scrollbar_width: int = 15
 
+# Map elements
+var habitas_points: Array = []
+var azn_nodes: Array = []
+var injection_zones: Array = []
+var bloodstreams: Array = []
+
+# Editor mode
+var editor_mode: String = "terrain"  # "terrain", "habitas", "azn", "injection", "stream"
+var mode_buttons: Dictionary = {}
+
 func _ready() -> void:
 	_load_sprites()
 	_init_grid()
@@ -99,6 +109,34 @@ func _setup_ui() -> void:
 
 	panel.add_child(HSeparator.new())
 
+	# Element editor modes
+	var elements_label := Label.new()
+	elements_label.text = "Elements"
+	elements_label.add_theme_font_size_override("font_size", 13)
+	panel.add_child(elements_label)
+
+	var modes = [
+		{"name": "terrain", "text": "🟫 Terrain"},
+		{"name": "habitas", "text": "🔴 Habitas Points"},
+		{"name": "azn", "text": "🟡 AZN Nodes"},
+		{"name": "injection", "text": "🟢 Injection Zones"},
+		{"name": "stream", "text": "➡️ Bloodstreams"}
+	]
+
+	for mode_data in modes:
+		var mode_btn := Button.new()
+		mode_btn.text = mode_data["text"]
+		mode_btn.custom_minimum_size = Vector2(0, 30)
+		mode_btn.toggle_mode = true
+		var mode_name = mode_data["name"]
+		mode_btn.pressed.connect(func(): _set_editor_mode(mode_name))
+		panel.add_child(mode_btn)
+		mode_buttons[mode_name] = mode_btn
+		if mode_name == "terrain":
+			mode_btn.button_pressed = true
+
+	panel.add_child(HSeparator.new())
+
 	# Tools section
 	var tools_label := Label.new()
 	tools_label.text = "Tools"
@@ -146,6 +184,11 @@ func _select_density(dens: String) -> void:
 	for d in terrain_buttons.keys():
 		terrain_buttons[d].button_pressed = (d == dens)
 
+func _set_editor_mode(mode: String) -> void:
+	editor_mode = mode
+	for m in mode_buttons.keys():
+		mode_buttons[m].button_pressed = (m == mode)
+
 func _draw() -> void:
 	var start_x = 220
 	var start_y = 30
@@ -183,6 +226,50 @@ func _draw() -> void:
 				draw_rect(Rect2(screen_x, screen_y, size, size), color)
 
 			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
+
+	# Draw injection zones
+	for zone in injection_zones:
+		var x1 = int(zone["x1"])
+		var y1 = int(zone["y1"])
+		var x2 = int(zone["x2"])
+		var y2 = int(zone["y2"])
+		var screen_x1 = start_x + (x1 * TILE_SIZE * zoom) - scroll_x
+		var screen_y1 = start_y + (y1 * TILE_SIZE * zoom) - scroll_y
+		var screen_x2 = start_x + ((x2 + 1) * TILE_SIZE * zoom) - scroll_x
+		var screen_y2 = start_y + ((y2 + 1) * TILE_SIZE * zoom) - scroll_y
+		var zone_color = Color(0, 1, 0, 0.2) if zone["player"] == 0 else Color(1, 0, 0, 0.2)
+		draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), zone_color)
+
+	# Draw habitas points
+	for point in habitas_points:
+		var screen_x = start_x + (point["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
+		var screen_y = start_y + (point["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
+		var radius = 5 * zoom
+		draw_circle(Vector2(screen_x, screen_y), radius, Color.RED)
+
+	# Draw AZN nodes
+	for node in azn_nodes:
+		var screen_x = start_x + (node["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
+		var screen_y = start_y + (node["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
+		var radius = 4 * zoom
+		draw_circle(Vector2(screen_x, screen_y), radius, Color.YELLOW)
+
+	# Draw bloodstreams
+	for stream in bloodstreams:
+		var screen_x = start_x + (stream["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
+		var screen_y = start_y + (stream["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
+		var arrow_size = 4 * zoom
+		var direction = stream.get("stream", "")
+		var arrow_color = Color.CYAN
+		match direction:
+			"north":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, 2)
+			"south":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, 2)
+			"east":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, 2)
+			"west":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, 2)
 
 	# Draw scrollbars
 	var total_width = int(map_width * TILE_SIZE * zoom)
@@ -247,20 +334,33 @@ func _input(event: InputEvent) -> void:
 				queue_redraw()
 				return
 
-		# Normal canvas painting
+		# Normal canvas interaction
 		if local_pos.x >= start_x and local_pos.x < start_x + canvas_width and local_pos.y >= start_y and local_pos.y < start_y + canvas_height:
 			var grid_x = int((local_pos.x - start_x + scroll_x) / (TILE_SIZE * zoom))
 			var grid_y = int((local_pos.y - start_y + scroll_y) / (TILE_SIZE * zoom))
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-				if event.button_index == MOUSE_BUTTON_LEFT:
+				if editor_mode == "terrain":
+					if event.button_index == MOUSE_BUTTON_LEFT:
+						_save_state()
+						is_painting = true
+						grid[grid_y][grid_x] = selected_density
+						queue_redraw()
+					elif event.button_index == MOUSE_BUTTON_RIGHT:
+						_save_state()
+						_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
+						queue_redraw()
+				elif editor_mode == "habitas" and event.button_index == MOUSE_BUTTON_LEFT:
 					_save_state()
-					is_painting = true
-					grid[grid_y][grid_x] = selected_density
+					habitas_points.append({"x": grid_x, "y": grid_y})
 					queue_redraw()
-				elif event.button_index == MOUSE_BUTTON_RIGHT:
+				elif editor_mode == "azn" and event.button_index == MOUSE_BUTTON_LEFT:
 					_save_state()
-					_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
+					azn_nodes.append({"x": grid_x, "y": grid_y, "quantity": 30})
+					queue_redraw()
+				elif editor_mode == "stream" and event.button_index == MOUSE_BUTTON_LEFT:
+					_save_state()
+					bloodstreams.append({"x": grid_x, "y": grid_y, "stream": "east"})
 					queue_redraw()
 
 	if event is InputEventMouseButton and not event.pressed:
@@ -364,9 +464,19 @@ func _load_map(filename: String) -> void:
 		map_width = data.get("width", DEFAULT_WIDTH)
 		map_height = data.get("height", DEFAULT_HEIGHT)
 		_init_grid()
+
+		# Load terrain
 		for cell in data.get("cells", []):
 			if "x" in cell and "y" in cell and cell["x"] < map_width and cell["y"] < map_height:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
+				if cell.get("stream"):
+					bloodstreams.append(cell)
+
+		# Load other elements
+		habitas_points = data.get("habitas_points", []).duplicate()
+		azn_nodes = data.get("azn_nodes", []).duplicate()
+		injection_zones = data.get("injection_zones", []).duplicate()
+
 		scroll_x = 0
 		scroll_y = 0
 		# Reset history for new map
@@ -381,7 +491,13 @@ func _save_map() -> void:
 	for y in range(map_height):
 		for x in range(map_width):
 			if grid[y][x] != "low":
-				cells.append({"x": x, "y": y, "density": grid[y][x]})
+				var cell_data = {"x": x, "y": y, "density": grid[y][x]}
+				# Add bloodstream if exists
+				for stream in bloodstreams:
+					if stream["x"] == x and stream["y"] == y:
+						cell_data["stream"] = stream.get("stream", "")
+						break
+				cells.append(cell_data)
 
 	var map_data = {
 		"name": "Custom Map",
@@ -390,12 +506,9 @@ func _save_map() -> void:
 		"default_density": "low",
 		"starting_azn": 150,
 		"cells": cells,
-		"habitas_points": [{"x": 2, "y": 2}, {"x": map_width - 3, "y": map_height - 3}],
-		"azn_nodes": [{"x": map_width / 2, "y": map_height / 2, "quantity": 30}],
-		"injection_zones": [
-			{"player": 0, "x1": 0, "y1": 0, "x2": 4, "y2": 4},
-			{"player": 1, "x1": max(0, map_width - 5), "y1": max(0, map_height - 5), "x2": map_width - 1, "y2": map_height - 1}
-		]
+		"habitas_points": habitas_points,
+		"azn_nodes": azn_nodes,
+		"injection_zones": injection_zones
 	}
 	var file = FileAccess.open("user://custom_map.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(map_data))
