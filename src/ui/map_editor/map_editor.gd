@@ -11,9 +11,12 @@ var grid: Array = []
 var selected_density: String = "low"
 var zoom: float = 1.0
 var is_painting: bool = false
+var scroll_pos: Vector2 = Vector2.ZERO
 
 var sprites: Dictionary = {}
 var terrain_buttons: Dictionary = {}
+var scroll_container: ScrollContainer
+var canvas_control: Control
 
 func _ready() -> void:
 	_load_sprites()
@@ -99,7 +102,7 @@ func _setup_ui() -> void:
 
 	var load_btn := Button.new()
 	load_btn.text = "📂 Load Map"
-	load_btn.pressed.connect(_load_map)
+	load_btn.pressed.connect(_show_load_dialog)
 	panel.add_child(load_btn)
 
 	var clear_btn := Button.new()
@@ -128,28 +131,30 @@ func _setup_ui() -> void:
 	status.add_theme_font_size_override("font_size", 10)
 	right.add_child(status)
 
+	# ScrollContainer for canvas
+	scroll_container = ScrollContainer.new()
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	right.add_child(scroll_container)
+
+	# Canvas in scroll container
+	canvas_control = Control.new()
+	canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE, map_height * TILE_SIZE)
+	canvas_control.draw.connect(_on_canvas_draw)
+	canvas_control.gui_input.connect(_on_canvas_input)
+	scroll_container.add_child(canvas_control)
+
 func _select_density(dens: String) -> void:
 	selected_density = dens
 	for d in terrain_buttons.keys():
 		terrain_buttons[d].button_pressed = (d == dens)
 
-func _draw() -> void:
-	# Draw background
-	draw_rect(Rect2(220, 30, get_size().x - 220, get_size().y - 30), Color(0.2, 0.2, 0.2))
-
-	# Draw grid
-	var start_y = 30
-	var canvas_width = get_size().x - 220
-	var canvas_height = get_size().y - 30
-
+func _on_canvas_draw() -> void:
 	for y in range(map_height):
 		for x in range(map_width):
-			var screen_x = 220 + x * TILE_SIZE * zoom
-			var screen_y = start_y + y * TILE_SIZE * zoom
+			var screen_x = x * TILE_SIZE * zoom
+			var screen_y = y * TILE_SIZE * zoom
 			var size = TILE_SIZE * zoom
-
-			if screen_x > get_size().x or screen_y > get_size().y:
-				continue
 
 			var density = grid[y][x]
 			var color = Color.WHITE
@@ -161,56 +166,56 @@ func _draw() -> void:
 				"bone": color = Color(0.2, 0.2, 0.2)
 
 			if sprites.get(density):
-				draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
+				canvas_control.draw_texture_rect(sprites[density], Rect2(screen_x, screen_y, size, size), false)
 			else:
-				draw_rect(Rect2(screen_x, screen_y, size, size), color)
+				canvas_control.draw_rect(Rect2(screen_x, screen_y, size, size), color)
 
-			draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
+			canvas_control.draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY, false, 1.0)
 
-func _input(event: InputEvent) -> void:
+func _on_canvas_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = min(zoom + 0.1, 3.0)
-			queue_redraw()
+			canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
+			canvas_control.queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = max(zoom - 0.1, 0.5)
-			queue_redraw()
+			canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
+			canvas_control.queue_redraw()
 			get_tree().root.set_input_as_handled()
 			return
 
 	if event is InputEventMouseButton and event.pressed:
-		var local_pos = event.position
-		if local_pos.x > 220 and local_pos.y > 30:
-			var grid_x = int((local_pos.x - 220) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - 30) / (TILE_SIZE * zoom))
+		var local_pos = canvas_control.get_local_mouse_position()
+		var grid_x = int(local_pos.x / (TILE_SIZE * zoom))
+		var grid_y = int(local_pos.y / (TILE_SIZE * zoom))
 
-			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-				if event.button_index == MOUSE_BUTTON_LEFT:
-					is_painting = true
-					grid[grid_y][grid_x] = selected_density
-					queue_redraw()
-				elif event.button_index == MOUSE_BUTTON_RIGHT:
-					_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
-					queue_redraw()
+		if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				is_painting = true
+				grid[grid_y][grid_x] = selected_density
+				canvas_control.queue_redraw()
+			elif event.button_index == MOUSE_BUTTON_RIGHT:
+				_flood_fill(grid_x, grid_y, grid[grid_y][grid_x])
+				canvas_control.queue_redraw()
 
 	if event is InputEventMouseButton and not event.pressed:
 		is_painting = false
 
 	if event is InputEventMouseMotion and is_painting:
-		var local_pos = event.position
-		if local_pos.x > 220 and local_pos.y > 30:
-			var grid_x = int((local_pos.x - 220) / (TILE_SIZE * zoom))
-			var grid_y = int((local_pos.y - 30) / (TILE_SIZE * zoom))
+		var local_pos = canvas_control.get_local_mouse_position()
+		var grid_x = int(local_pos.x / (TILE_SIZE * zoom))
+		var grid_y = int(local_pos.y / (TILE_SIZE * zoom))
 
-			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-				grid[grid_y][grid_x] = selected_density
-				queue_redraw()
+		if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+			grid[grid_y][grid_x] = selected_density
+			canvas_control.queue_redraw()
 
 func _clear_map() -> void:
 	_init_grid()
-	queue_redraw()
+	canvas_control.queue_redraw()
 
 func _add_border() -> void:
 	for x in range(map_width):
@@ -219,9 +224,9 @@ func _add_border() -> void:
 	for y in range(map_height):
 		grid[y][0] = "bone"
 		grid[y][map_width - 1] = "bone"
-	queue_redraw()
+	canvas_control.queue_redraw()
 
-func _load_map() -> void:
+func _show_load_dialog() -> void:
 	var dir = DirAccess.open("res://maps/")
 	if not dir:
 		return
@@ -236,7 +241,36 @@ func _load_map() -> void:
 	if files.is_empty():
 		return
 
-	var file = FileAccess.open("res://maps/" + files[0], FileAccess.READ)
+	# Create dialog
+	var dialog = AcceptDialog.new()
+	dialog.title = "Load Map"
+	dialog.initial_position = Window.WINDOW_POS_CENTER_SCREEN
+	dialog.size = Vector2i(400, 300)
+	add_child(dialog)
+
+	var container := VBoxContainer.new()
+	dialog.add_child(container)
+
+	var label := Label.new()
+	label.text = "Select a map to edit:"
+	container.add_child(label)
+
+	var item_list := ItemList.new()
+	item_list.custom_minimum_size = Vector2(400, 250)
+	for file in files:
+		item_list.add_item(file.trim_suffix(".json"))
+	container.add_child(item_list)
+
+	dialog.confirmed.connect(func():
+		var idx = item_list.get_selected_items()
+		if idx.size() > 0:
+			_load_map(files[idx[0]])
+		dialog.queue_free()
+	)
+	dialog.popup_centered_ratio(0.5)
+
+func _load_map(filename: String) -> void:
+	var file = FileAccess.open("res://maps/" + filename, FileAccess.READ)
 	var data = JSON.parse_string(file.get_as_text())
 	if data:
 		map_width = data.get("width", DEFAULT_WIDTH)
@@ -245,7 +279,8 @@ func _load_map() -> void:
 		for cell in data.get("cells", []):
 			if "x" in cell and "y" in cell and cell["x"] < map_width and cell["y"] < map_height:
 				grid[cell["y"]][cell["x"]] = cell.get("density", "low")
-		queue_redraw()
+		canvas_control.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom, map_height * TILE_SIZE * zoom)
+		canvas_control.queue_redraw()
 
 func _save_map() -> void:
 	var cells = []
