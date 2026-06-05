@@ -65,9 +65,10 @@ func _build_ui() -> void:
 
 	_map_dropdown = OptionButton.new()
 	_map_dropdown.custom_minimum_size = Vector2(0, 32)
-	for map_path in _available_maps:
+	for idx: int in range(_available_maps.size()):
+		var map_path: String = _available_maps[idx]
 		var map_name: String = map_path.split("/")[-1].trim_suffix(".json")
-		_map_dropdown.add_item(map_name, 0)
+		_map_dropdown.add_item(map_name, idx)
 	center.add_child(_map_dropdown)
 
 	# ── Strategy selection ──
@@ -79,9 +80,10 @@ func _build_ui() -> void:
 
 	_strat_p0_dropdown = OptionButton.new()
 	_strat_p0_dropdown.custom_minimum_size = Vector2(0, 32)
-	for strat_path in _available_strategies:
+	for idx: int in range(_available_strategies.size()):
+		var strat_path: String = _available_strategies[idx]
 		var strat_name: String = strat_path.split("/")[-1].trim_suffix(".gd")
-		_strat_p0_dropdown.add_item(strat_name, 0)
+		_strat_p0_dropdown.add_item(strat_name, idx)
 	center.add_child(_strat_p0_dropdown)
 
 	var strat_p1_label := Label.new()
@@ -92,9 +94,10 @@ func _build_ui() -> void:
 
 	_strat_p1_dropdown = OptionButton.new()
 	_strat_p1_dropdown.custom_minimum_size = Vector2(0, 32)
-	for strat_path in _available_strategies:
+	for idx: int in range(_available_strategies.size()):
+		var strat_path: String = _available_strategies[idx]
 		var strat_name: String = strat_path.split("/")[-1].trim_suffix(".gd")
-		_strat_p1_dropdown.add_item(strat_name, 0)
+		_strat_p1_dropdown.add_item(strat_name, idx)
 	center.add_child(_strat_p1_dropdown)
 
 	center.add_child(_spacer(8))
@@ -168,13 +171,20 @@ func _scan_maps_and_strategies() -> void:
 # ─── button handlers ────────────────────────────────────────────────────────
 
 func _on_run_match() -> void:
-	if _available_maps.is_empty() or _available_strategies.size() < 2:
-		_set_status("Error: need maps and strategies")
+	if _available_maps.is_empty():
+		_set_status("Error: no maps found in res://maps/")
+		return
+	if _available_strategies.size() < 2:
+		_set_status("Error: need at least 2 strategies in res://strategies/")
 		return
 
 	var selected_map_idx: int = _map_dropdown.get_selected_id()
 	var selected_p0_idx: int = _strat_p0_dropdown.get_selected_id()
 	var selected_p1_idx: int = _strat_p1_dropdown.get_selected_id()
+
+	if selected_map_idx < 0 or selected_p0_idx < 0 or selected_p1_idx < 0:
+		_set_status("Error: please select map and strategies")
+		return
 
 	var map_path: String = _available_maps[selected_map_idx]
 	var strat_p0: String = _available_strategies[selected_p0_idx]
