@@ -241,33 +241,8 @@ func _show_load_dialog() -> void:
 	if files.is_empty():
 		return
 
-	# Create dialog
-	var dialog = AcceptDialog.new()
-	dialog.title = "Load Map"
-	dialog.initial_position = Window.WINDOW_POS_CENTER_SCREEN
-	dialog.size = Vector2i(400, 300)
-	add_child(dialog)
-
-	var container := VBoxContainer.new()
-	dialog.add_child(container)
-
-	var label := Label.new()
-	label.text = "Select a map to edit:"
-	container.add_child(label)
-
-	var item_list := ItemList.new()
-	item_list.custom_minimum_size = Vector2(400, 250)
-	for file in files:
-		item_list.add_item(file.trim_suffix(".json"))
-	container.add_child(item_list)
-
-	dialog.confirmed.connect(func():
-		var idx = item_list.get_selected_items()
-		if idx.size() > 0:
-			_load_map(files[idx[0]])
-		dialog.queue_free()
-	)
-	dialog.popup_centered_ratio(0.5)
+	# Load first map for now (simple approach)
+	_load_map(files[0])
 
 func _load_map(filename: String) -> void:
 	var file = FileAccess.open("res://maps/" + filename, FileAccess.READ)
