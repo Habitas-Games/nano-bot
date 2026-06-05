@@ -297,13 +297,122 @@ Drawn as outline rect for each cell
 
 ---
 
-## 9. Next: Plan Phase
+## 10. Phase 1 Implementation Status
 
-With actual requirements documented, plan.md should specify:
-- Phase 1: Canvas with correct terrain + stream rendering
-- Phase 2: Editing tools (paint, fill)
-- Phase 3: Element placement
-- Phase 4: File I/O
-- Phase 5: Polish
+### What's Implemented
 
-All based on actual simulator behavior, not assumptions.
+**Core Functionality:**
+- ✅ Load maps from JSON (simulator MapLoader format)
+- ✅ Display terrain grid with correct textures (based on Density enum)
+- ✅ Display streams: stream texture (tile_stream_h/v.png) + procedural arrow overlay
+- ✅ Display elements: habitas points, AZN nodes, injection zones
+- ✅ Zoom: scroll wheel (0.5x to 3.0x)
+- ✅ Pan: middle-click drag with proper clamping
+
+**Data Model (Correct Implementation):**
+```
+cells[y * width + x] = {
+  "density": int (0-3),      # Density.LOW, MEDIUM, HIGH, BONE
+  "stream_dir": int (0-4)    # StreamDir.NONE, NORTH, SOUTH, EAST, WEST
+}
+```
+- Stream is a cell property, independent of density
+- Both stored as integer enums (not strings)
+- Proper enum values matching simulator
+
+**Rendering (Exact Match to Simulator):**
+- Stream cells: Render stream texture first, then procedural arrow overlay
+- Arrow: 3 lines (shaft + 2-line arrowhead)
+- Arrow color: Color(0.70, 0.25, 0.25, 0.80) - reddish-brown
+- Arrow direction: Calculated from StreamDir enum
+- Grid lines: Subtle (Color 0,0,0,0.12) drawn per cell
+- Terrain colors: Match sprite textures loaded from assets
+
+**UI Layout:**
+- Left: Status bar (30px) + Toolbar (40px) + Canvas area + Scrollbar (15px)
+- Right: Info panel (200px) with title and map size
+- Proper HBox/VBox layout with size_flags for expansion
+
+**Input Handling:**
+- Scroll wheel: Zoom in/out with ZOOM_STEP
+- Middle-click drag: Pan with scroll clamping
+- Proper clamping: `clampi(scroll, 0, max_scroll)`
+
+### What's NOT Implemented Yet
+
+- ❌ Terrain painting (left-click single cell)
+- ❌ Drag painting (continuous path)
+- ❌ Flood fill (right-click)
+- ❌ Stream placement (direction selector + click)
+- ❌ Element placement (habitas, AZN, zones)
+- ❌ Undo/history
+- ❌ Save/load dialogs (buttons exist but placeholder)
+- ❌ Validation warnings
+- ❌ Keyboard shortcuts
+
+### Architecture Notes
+
+**File Structure:**
+- `src/ui/map_editor/map_editor.gd` - Single file, 380+ lines
+- `scenes/map_editor_scene.tscn` - Minimal scene (just attaches script)
+
+**Key Implementation Details:**
+1. Uses `_draw()` override for all rendering
+2. Uses `_input()` override for all input
+3. Flat cell array indexed as `cells[y * width + x]`
+4. All textures preloaded in `_load_textures()`
+5. Map loaded using simulator JSON format in `_load_map_from_file()`
+6. Coordinate conversion: `screen_pos = canvas_pos + (grid_pos * CELL_SIZE * zoom) - scroll`
+
+**Constants Used (Match Simulator):**
+```
+CELL_SIZE = 16
+STREAM_COLOR = Color(0.70, 0.25, 0.25, 0.80)
+GRID_COLOR = Color(0.00, 0.00, 0.00, 0.12)
+```
+
+### What's Working vs. Plan
+
+| Planned | Implemented | Status |
+|---------|-------------|--------|
+| Load maps from JSON | ✅ Yes, simulator format | ✅ Complete |
+| Display terrain | ✅ Yes, all 4 densities | ✅ Complete |
+| Display streams | ✅ Yes, texture + arrow | ✅ Complete |
+| Display elements | ✅ Yes, all types | ✅ Complete |
+| Zoom/pan | ✅ Yes, correct math | ✅ Complete |
+| Paint terrain | ❌ Not yet | Phase 2 |
+| Flood fill | ❌ Not yet | Phase 2 |
+| Stream placement | ❌ Not yet | Phase 3 |
+| Element placement | ❌ Not yet | Phase 4 |
+| Save/load dialogs | ⚠️ UI stubs only | Phase 5 |
+| Undo/history | ❌ Not yet | Phase 6 |
+
+### Known Limitations (Phase 1)
+
+1. **Read-only:** Can load and view maps, but cannot edit anything
+2. **No undo:** All changes are permanent (once edit features added)
+3. **No validation:** Maps can be in any state when saved
+4. **Load only:** No save functionality yet (buttons are placeholders)
+5. **Static elements:** Habitas, AZN, zones display but cannot be modified
+
+### Next Phase (Phase 2): Terrain Editing
+
+Required for terrain editing to work:
+1. Click detection (left-click in canvas area)
+2. Grid coordinate conversion (screen → grid)
+3. Density selector UI in right panel
+4. Paint single cell: `cells[grid_y * width + grid_x]["density"] = selected_density`
+5. Drag paint: Track mouse motion and paint continuous path
+6. Flood fill: Connected region detection algorithm
+
+---
+
+## 11. Next: Plan Phase
+
+With Phase 1 complete and analyzed, Phase 2 planning should specify:
+- Terrain editing tools (paint, fill)
+- Edit Phase 3: Element placement
+- Edit Phase 4: File I/O
+- Edit Phase 5: Polish
+
+All future phases build on Phase 1's correct rendering foundation.
