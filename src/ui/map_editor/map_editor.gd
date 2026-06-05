@@ -464,7 +464,7 @@ func _input(event: InputEvent) -> void:
 					get_tree().root.set_input_as_handled()
 					return
 
-	# Drag paint
+	# Drag paint (input priority: painting has exclusive input)
 	if event is InputEventMouseMotion and is_painting:
 		var local_pos = event.position
 		if _is_in_canvas(local_pos):
@@ -475,6 +475,10 @@ func _input(event: InputEvent) -> void:
 				if Vector2i(grid_x, grid_y) != last_paint_pos:
 					_paint_cell(grid_x, grid_y)
 					last_paint_pos = Vector2i(grid_x, grid_y)
+
+		# Consume input: painting has exclusive input, prevents event propagation
+		get_tree().root.set_input_as_handled()
+		return
 
 	# Pan with middle-click drag
 	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MIDDLE:
