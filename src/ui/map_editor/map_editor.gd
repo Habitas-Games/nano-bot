@@ -264,7 +264,20 @@ func _show_load_dialog() -> void:
 	if files.is_empty():
 		return
 
-	_load_map(files[0])
+	# Create a simple popup menu
+	var popup := PopupMenu.new()
+	add_child(popup)
+
+	for i in range(files.size()):
+		var map_name = files[i].trim_suffix(".json")
+		popup.add_item(map_name, i)
+
+	popup.id_pressed.connect(func(id: int):
+		_load_map(files[id])
+		popup.queue_free()
+	)
+
+	popup.popup_rect(Rect2(get_global_mouse_position(), Vector2(200, 100)))
 
 func _load_first_map() -> void:
 	var dir = DirAccess.open("res://maps/")
