@@ -395,6 +395,72 @@ GRID_COLOR = Color(0.00, 0.00, 0.00, 0.12)
 4. **Load only:** No save functionality yet (buttons are placeholders)
 5. **Static elements:** Habitas, AZN, zones display but cannot be modified
 
+### Phase 2 Issue: Painting and Dragging Interaction
+
+**Problem Identified:**
+- Left-click drag to paint and other drag operations (pan with middle-click) have conflicting input handling
+- Mouse motion events during paint drag can interfere with coordinate calculations and visual feedback
+- No clear input priority/hierarchy was specified before implementation
+
+**Root Cause:**
+- Input handling uses generic MouseMotion events without properly consuming them
+- Multiple handlers (paint drag, pan, etc.) compete for same input events
+- No call to `set_input_as_handled()` during drag painting to prevent event propagation
+
+**Proposed Solutions:**
+
+**Option A: Input Priority (Recommended)**
+- Establish priority: Active tool has exclusive input
+- When painting (is_painting = true), consume all MouseMotion events with `set_input_as_handled()`
+- Pan (middle-click) has lower priority, only processes when no active painting
+- Clear separation: One operation at a time
+
+**Option B: Gesture Detection**
+- Distinguish between short drag (paint) vs. long drag (pan)
+- Track drag distance/duration to detect intent
+- More complex but allows flexibility
+- Risk: Harder to predict user intent
+
+**Option C: Tool Mode System**
+- Add explicit "tool mode": PAINT, PAN, SELECT
+- User switches modes before using tool
+- Very explicit but less intuitive
+- Good for complex editors, overkill here
+
+**Recommended Implementation (Option A):**
+1. During `is_painting = true`, call `set_input_as_handled()` on all MouseMotion events
+2. This prevents event bubbling to other handlers
+3. Clear input hierarchy: active tool has exclusive input
+4. Pan only works when not painting
+
+**Code Change Required:**
+```gdscript
+# Drag paint
+if event is InputEventMouseMotion and is_painting:
+  var local_pos = event.position
+  if _is_in_canvas(local_pos):
+    var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+    var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+
+    if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+      if Vector2i(grid_x, grid_y) != last_paint_pos:
+        _paint_cell(grid_x, grid_y)
+        last_paint_pos = Vector2i(grid_x, grid_y)
+      get_tree().root.set_input_as_handled()  # CRITICAL: Prevent event propagation
+      return
+```
+
+**Impact on Future Phases:**
+- Phase 3 (Stream placement): Will have same issue, need same solution
+- Phase 4 (Element placement): Drag to place zones will need input priority
+- All future drag operations must follow same pattern
+
+**Why This Wasn't Caught in Analysis:**
+- Analysis didn't specify input event handling hierarchy
+- Plan didn't document input priority/exclusivity
+- Implementation proceeded without clear specification
+- Should have added input handling section to analysis before coding
+
 ### Next Phase (Phase 2): Terrain Editing
 
 Required for terrain editing to work:
