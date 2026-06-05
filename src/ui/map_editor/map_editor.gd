@@ -19,6 +19,7 @@ var last_painted_pos: Vector2 = Vector2.ZERO
 var sprites: Dictionary = {}
 var canvas: Control
 var scroll_container: ScrollContainer
+var terrain_buttons: Dictionary = {}
 
 func _ready() -> void:
 	_load_sprites()
@@ -68,22 +69,21 @@ func _setup_ui() -> void:
 	tile_title.add_theme_font_size_override("font_size", 13)
 	panel.add_child(tile_title)
 
-	var tile_container := GridContainer.new()
-	tile_container.columns = 2
-	tile_container.add_theme_constant_override("h_separation", 4)
-	tile_container.add_theme_constant_override("v_separation", 4)
+	var tile_container := VBoxContainer.new()
+	tile_container.add_theme_constant_override("separation", 4)
 	panel.add_child(tile_container)
 
 	for dens in ["low", "medium", "high", "bone"]:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(100, 50)
+		btn.custom_minimum_size = Vector2(0, 40)
 		btn.text = dens.to_upper()
 		btn.toggle_mode = true
+		var dens_copy = dens  # Capture in closure
 		btn.pressed.connect(func():
-			selected_density = dens
-			_update_button_states(panel)
+			_select_density(dens_copy)
 		)
 		tile_container.add_child(btn)
+		terrain_buttons[dens] = btn
 		if dens == "low":
 			btn.button_pressed = true
 
@@ -163,12 +163,10 @@ func _setup_ui() -> void:
 	canvas.gui_input.connect(_on_canvas_input)
 	scroll_container.add_child(canvas)
 
-func _update_button_states(panel: VBoxContainer) -> void:
-	var tile_container = panel.get_child(2)  # GridContainer
-	for i in range(tile_container.get_child_count()):
-		var btn = tile_container.get_child(i)
-		if btn is Button:
-			btn.button_pressed = (btn.text.to_lower() == selected_density.to_upper())
+func _select_density(dens: String) -> void:
+	selected_density = dens
+	for d in terrain_buttons.keys():
+		terrain_buttons[d].button_pressed = (d == dens)
 
 func _on_canvas_draw() -> void:
 	for y in range(map_height):
