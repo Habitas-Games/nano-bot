@@ -227,7 +227,7 @@ func _on_canvas_input(event: InputEvent) -> void:
 			else:
 				is_painting = false
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			var grid_pos = event.position / TILE_SIZE
+			var grid_pos = _get_grid_pos(event.position)
 			var x = int(grid_pos.x)
 			var y = int(grid_pos.y)
 
@@ -238,8 +238,12 @@ func _on_canvas_input(event: InputEvent) -> void:
 func _update_canvas_size() -> void:
 	canvas.custom_minimum_size = Vector2(map_width * TILE_SIZE * zoom + 100, map_height * TILE_SIZE * zoom + 100)
 
+func _get_grid_pos(screen_pos: Vector2) -> Vector2:
+	var local_pos = canvas.get_local_mouse_position()
+	return local_pos / TILE_SIZE
+
 func _paint_at(screen_pos: Vector2) -> void:
-	var grid_pos = screen_pos / TILE_SIZE
+	var grid_pos = _get_grid_pos(screen_pos)
 	var x = int(grid_pos.x)
 	var y = int(grid_pos.y)
 
@@ -247,8 +251,8 @@ func _paint_at(screen_pos: Vector2) -> void:
 		grid[y][x] = selected_density
 
 func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
-	var start_grid = from_pos / TILE_SIZE
-	var end_grid = to_pos / TILE_SIZE
+	var start_grid = _get_grid_pos(from_pos)
+	var end_grid = _get_grid_pos(to_pos)
 
 	var x0 = int(start_grid.x)
 	var y0 = int(start_grid.y)
