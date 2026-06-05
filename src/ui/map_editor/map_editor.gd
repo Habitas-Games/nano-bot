@@ -11,7 +11,6 @@ var grid: Array = []
 var selected_density: String = "low"
 var zoom: float = 1.0
 var is_painting: bool = false
-var last_painted_pos: Vector2 = Vector2.ZERO
 
 var sprites: Dictionary = {}
 var canvas_control: Control
@@ -57,26 +56,48 @@ func _setup_ui() -> void:
 	title.add_theme_font_size_override("font_size", 18)
 	panel.add_child(title)
 
-	# Terrain buttons with sprites
+	# Terrain section
 	var tile_label := Label.new()
 	tile_label.text = "Terrain"
 	tile_label.add_theme_font_size_override("font_size", 13)
 	panel.add_child(tile_label)
 
+	# Create terrain buttons with sprites
 	for dens in ["low", "medium", "high", "bone"]:
+		var btn_container := HBoxContainer.new()
+		btn_container.custom_minimum_size = Vector2(0, 50)
+		panel.add_child(btn_container)
+
+		# Sprite preview
+		if sprites.get(dens):
+			var sprite_rect := TextureRect.new()
+			sprite_rect.texture = sprites[dens]
+			sprite_rect.custom_minimum_size = Vector2(40, 40)
+			sprite_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			sprite_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+			btn_container.add_child(sprite_rect)
+
+		# Button
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(0, 50)
 		btn.text = dens.to_upper()
 		btn.toggle_mode = true
 		var dens_copy = dens
 		btn.pressed.connect(func(): _select_density(dens_copy))
-		panel.add_child(btn)
+		btn_container.add_child(btn)
 		terrain_buttons[dens] = btn
 		if dens == "low":
 			btn.button_pressed = true
 
+	# Add Border button
+	var border_btn := Button.new()
+	border_btn.text = "⬜ Add Border"
+	border_btn.custom_minimum_size = Vector2(0, 40)
+	border_btn.pressed.connect(_add_border)
+	panel.add_child(border_btn)
+
 	panel.add_child(HSeparator.new())
 
+	# Tools section
 	var tools_label := Label.new()
 	tools_label.text = "Tools"
 	tools_label.add_theme_font_size_override("font_size", 13)
@@ -84,16 +105,19 @@ func _setup_ui() -> void:
 
 	var load_btn := Button.new()
 	load_btn.text = "📂 Load Map"
+	load_btn.custom_minimum_size = Vector2(0, 36)
 	load_btn.pressed.connect(_load_map)
 	panel.add_child(load_btn)
 
 	var clear_btn := Button.new()
 	clear_btn.text = "🗑️ Clear"
+	clear_btn.custom_minimum_size = Vector2(0, 36)
 	clear_btn.pressed.connect(_clear_map)
 	panel.add_child(clear_btn)
 
 	var save_btn := Button.new()
 	save_btn.text = "💾 Save Map"
+	save_btn.custom_minimum_size = Vector2(0, 36)
 	save_btn.pressed.connect(_save_map)
 	panel.add_child(save_btn)
 
@@ -101,6 +125,7 @@ func _setup_ui() -> void:
 
 	var back_btn := Button.new()
 	back_btn.text = "← Back to Menu"
+	back_btn.custom_minimum_size = Vector2(0, 36)
 	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_scene.tscn"))
 	panel.add_child(back_btn)
 
@@ -112,12 +137,6 @@ func _setup_ui() -> void:
 	status.text = "Click & drag to paint | Right-click to fill | Scroll wheel to zoom"
 	status.add_theme_font_size_override("font_size", 10)
 	right.add_child(status)
-
-	var border_btn := Button.new()
-	border_btn.text = "⬜ Add Border"
-	border_btn.custom_minimum_size = Vector2(0, 30)
-	border_btn.pressed.connect(_add_border)
-	right.add_child(border_btn)
 
 	scroll_container = ScrollContainer.new()
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -152,6 +171,7 @@ func _draw_canvas() -> void:
 				canvas_control.draw_texture(sprites[density], pos)
 			else:
 				canvas_control.draw_rect(Rect2(pos, Vector2(TILE_SIZE, TILE_SIZE)), color)
+
 			canvas_control.draw_rect(Rect2(pos, Vector2(TILE_SIZE, TILE_SIZE)), Color.GRAY, false, 1.0)
 
 func _on_input(event: InputEvent) -> void:
@@ -171,13 +191,12 @@ func _on_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.pressed:
 		var local_pos = canvas_control.get_local_mouse_position()
-		var x = int(local_pos.x / TILE_SIZE)
-		var y = int(local_pos.y / TILE_SIZE)
+		var x = int(local_pos.x / (TILE_SIZE * zoom))
+		var y = int(local_pos.y / (TILE_SIZE * zoom))
 
 		if x >= 0 and x < map_width and y >= 0 and y < map_height:
 			if event.button_index == MOUSE_BUTTON_LEFT:
 				is_painting = true
-				last_painted_pos = event.position
 				grid[y][x] = selected_density
 				canvas_control.queue_redraw()
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
@@ -189,8 +208,8 @@ func _on_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion and is_painting:
 		var local_pos = canvas_control.get_local_mouse_position()
-		var x = int(local_pos.x / TILE_SIZE)
-		var y = int(local_pos.y / TILE_SIZE)
+		var x = int(local_pos.x / (TILE_SIZE * zoom))
+		var y = int(local_pos.y / (TILE_SIZE * zoom))
 		if x >= 0 and x < map_width and y >= 0 and y < map_height:
 			grid[y][x] = selected_density
 			canvas_control.queue_redraw()
@@ -202,7 +221,8 @@ func _init_grid() -> void:
 		for x in range(map_width):
 			row.append("low")
 		grid.append(row)
-	canvas_control.queue_redraw()
+	if canvas_control:
+		canvas_control.queue_redraw()
 
 func _clear_map() -> void:
 	_init_grid()
