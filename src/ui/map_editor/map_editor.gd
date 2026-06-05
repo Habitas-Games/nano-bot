@@ -31,6 +31,8 @@ var bloodstreams: Array = []
 # Editor mode
 var editor_mode: String = "terrain"  # "terrain", "habitas", "azn", "injection", "stream"
 var mode_buttons: Dictionary = {}
+var selected_stream_direction: String = "north"  # "north", "south", "east", "west", "ns", "ew"
+var stream_direction_buttons: Dictionary = {}
 
 func _ready() -> void:
 	_load_sprites()
@@ -135,6 +137,35 @@ func _setup_ui() -> void:
 		if mode_name == "terrain":
 			mode_btn.button_pressed = true
 
+	# Stream direction selector
+	var stream_label := Label.new()
+	stream_label.text = "Stream Direction"
+	stream_label.add_theme_font_size_override("font_size", 11)
+	stream_label.visible = false
+	panel.add_child(stream_label)
+
+	var directions = [
+		{"name": "north", "text": "↑ North"},
+		{"name": "south", "text": "↓ South"},
+		{"name": "east", "text": "→ East"},
+		{"name": "west", "text": "← West"},
+		{"name": "ns", "text": "↕ N-S"},
+		{"name": "ew", "text": "↔ E-W"}
+	]
+
+	for dir_data in directions:
+		var dir_btn := Button.new()
+		dir_btn.text = dir_data["text"]
+		dir_btn.custom_minimum_size = Vector2(0, 28)
+		dir_btn.toggle_mode = true
+		dir_btn.visible = false
+		var dir_name = dir_data["name"]
+		dir_btn.pressed.connect(func(): _set_stream_direction(dir_name))
+		panel.add_child(dir_btn)
+		stream_direction_buttons[dir_name] = dir_btn
+		if dir_name == "north":
+			dir_btn.button_pressed = true
+
 	panel.add_child(HSeparator.new())
 
 	# Tools section
@@ -188,6 +219,16 @@ func _set_editor_mode(mode: String) -> void:
 	editor_mode = mode
 	for m in mode_buttons.keys():
 		mode_buttons[m].button_pressed = (m == mode)
+
+	# Show/hide stream direction buttons
+	var show_stream = (mode == "stream")
+	for btn in stream_direction_buttons.values():
+		btn.visible = show_stream
+
+func _set_stream_direction(direction: String) -> void:
+	selected_stream_direction = direction
+	for d in stream_direction_buttons.keys():
+		stream_direction_buttons[d].button_pressed = (d == direction)
 
 func _draw() -> void:
 	var start_x = 220
@@ -258,18 +299,25 @@ func _draw() -> void:
 	for stream in bloodstreams:
 		var screen_x = start_x + (stream["x"] * TILE_SIZE * zoom) - scroll_x + (TILE_SIZE * zoom) / 2
 		var screen_y = start_y + (stream["y"] * TILE_SIZE * zoom) - scroll_y + (TILE_SIZE * zoom) / 2
-		var arrow_size = 4 * zoom
+		var arrow_size = 5 * zoom
 		var direction = stream.get("stream", "")
 		var arrow_color = Color.CYAN
+		var line_width = 2.0
 		match direction:
 			"north":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, 2)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, line_width)
 			"south":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, 2)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, line_width)
 			"east":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, 2)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, line_width)
 			"west":
-				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, 2)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, line_width)
+			"ns":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y - arrow_size), arrow_color, line_width)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x, screen_y + arrow_size), arrow_color, line_width)
+			"ew":
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x - arrow_size, screen_y), arrow_color, line_width)
+				draw_line(Vector2(screen_x, screen_y), Vector2(screen_x + arrow_size, screen_y), arrow_color, line_width)
 
 	# Draw scrollbars
 	var total_width = int(map_width * TILE_SIZE * zoom)
@@ -360,7 +408,8 @@ func _input(event: InputEvent) -> void:
 					queue_redraw()
 				elif editor_mode == "stream" and event.button_index == MOUSE_BUTTON_LEFT:
 					_save_state()
-					bloodstreams.append({"x": grid_x, "y": grid_y, "stream": "east"})
+					bloodstreams.append({"x": grid_x, "y": grid_y, "stream": selected_stream_direction})
+					grid[grid_y][grid_x] = "medium"  # Bloodstreams are medium density
 					queue_redraw()
 
 	if event is InputEventMouseButton and not event.pressed:
