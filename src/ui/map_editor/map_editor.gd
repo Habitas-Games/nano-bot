@@ -64,26 +64,19 @@ func _setup_ui() -> void:
 
 	# Create terrain buttons with sprites
 	for dens in ["low", "medium", "high", "bone"]:
-		var btn_container := HBoxContainer.new()
-		btn_container.custom_minimum_size = Vector2(0, 50)
-		panel.add_child(btn_container)
-
-		# Sprite preview
-		if sprites.get(dens):
-			var sprite_rect := TextureRect.new()
-			sprite_rect.texture = sprites[dens]
-			sprite_rect.custom_minimum_size = Vector2(40, 40)
-			sprite_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			sprite_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			btn_container.add_child(sprite_rect)
-
-		# Button
 		var btn := Button.new()
-		btn.text = dens.to_upper()
+		btn.custom_minimum_size = Vector2(0, 50)
+		btn.text = "  " + dens.to_upper()
 		btn.toggle_mode = true
+
+		# Set icon from sprite
+		if sprites.get(dens):
+			btn.icon = sprites[dens]
+			btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
 		var dens_copy = dens
 		btn.pressed.connect(func(): _select_density(dens_copy))
-		btn_container.add_child(btn)
+		panel.add_child(btn)
 		terrain_buttons[dens] = btn
 		if dens == "low":
 			btn.button_pressed = true
