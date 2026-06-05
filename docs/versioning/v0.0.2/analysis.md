@@ -395,7 +395,52 @@ GRID_COLOR = Color(0.00, 0.00, 0.00, 0.12)
 4. **Load only:** No save functionality yet (buttons are placeholders)
 5. **Static elements:** Habitas, AZN, zones display but cannot be modified
 
-### Phase 2 Issue: Painting and Dragging Interaction
+### Phase 2 Issue 1: Input Priority (Documented & Fixed)
+
+**Problem:** Painting and dragging were mixing.
+**Root Cause:** Missing input handling specification in analysis.
+**Solution:** Input priority - painting has exclusive input (documented above).
+
+### Phase 2 Issue 2: Terrain Selection UI (NOT PROPERLY ANALYZED)
+
+**Problem Identified:**
+- Button labels are text ("LOW", "MEDIUM", "HIGH") instead of visual terrain
+- No movement cost information displayed
+- Doesn't match simulator's actual representation of terrain
+
+**What Should Have Been Analyzed FIRST:**
+From simulator code (map_data.gd):
+```
+DENSITY_COST = {
+  Density.LOW:    2 turns,
+  Density.MEDIUM: 3 turns,
+  Density.HIGH:   4 turns
+}
+```
+
+**Correct UI Design (Should Have Been in Plan):**
+1. Button shows actual tile TEXTURE (not text label)
+2. Each button displays movement cost: "2 turns", "3 turns", "4 turns"
+3. Selected button highlighted (toggle mode)
+4. User selects by clicking tile image, not by reading text
+
+**Example Button Layout:**
+```
+[tile_low.png]    [tile_medium.png] [tile_high.png]  [tile_bone.png]
+  2 turns           3 turns           4 turns          blocked
+```
+
+**Why This Wasn't Caught:**
+- Didn't examine simulator UI before designing editor UI
+- Made assumptions about how to represent terrain
+- Didn't translate simulator information (DENSITY_COST) into UI design
+- Patched implementation after-the-fact instead of analyzing first
+
+**Impact:**
+- Current UI is confusing (text-based, no cost info)
+- Doesn't match simulator's conceptual model
+- User must memorize "LOW = 2 turns" etc.
+- Poor UX compared to visual tile selection
 
 **Problem Identified:**
 - Left-click drag to paint and other drag operations (pan with middle-click) have conflicting input handling
