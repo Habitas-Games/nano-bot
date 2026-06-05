@@ -79,9 +79,17 @@ The editor must handle maps up to 80×80 tiles:
 
 ### REQ-5: File Operations
 The editor must support:
-- **REQ-5.1** Load existing maps from res://maps/ directory
-- **REQ-5.2** Save current map as JSON file
-- **REQ-5.3** Clear map to start over
+- **REQ-5.1** Load existing maps from res://maps/ directory (for editing or as templates)
+- **REQ-5.2** Save current map with user-specified filename (Save As)
+- **REQ-5.3** Prevent accidental overwrites (confirm if filename exists)
+- **REQ-5.4** Clear map to start over
+
+### REQ-5.5: Element Modification (Post-Placement)
+The editor must allow users to:
+- **REQ-5.5a** Select placed elements on the canvas
+- **REQ-5.5b** View selected element properties (position, type, parameters)
+- **REQ-5.5c** Edit element properties (e.g., AZN quantity)
+- **REQ-5.5d** Delete selected elements
 
 ### REQ-6: Undo/History
 The editor must support:
@@ -100,6 +108,15 @@ The editor must provide feedback:
 - **REQ-8.1** Clear indication of what tool is active
 - **REQ-8.2** Show what will happen before it happens
 - **REQ-8.3** Confirmation for destructive operations (clear, load over unsaved)
+- **REQ-8.4** Grid coordinates on hover (for precision placement)
+
+### REQ-9: Map Validation
+The editor must validate maps before saving:
+- **REQ-9.1** Warn if map has no habitas points (game requires at least 1)
+- **REQ-9.2** Warn if map has no injection zones (game requires spawn areas)
+- **REQ-9.3** Warn if map has no AZN nodes (game requires resources)
+- **REQ-9.4** Warnings are advisory (don't block save, just inform user)
+- **REQ-9.5** Display warnings in UI before saving
 
 ---
 
@@ -180,34 +197,51 @@ Map:
 
 ---
 
-## 7. Key Questions (Must Answer Before Planning)
+## 7. Key Questions - ANSWERED
 
 ### Q1: UI Layout
-What proportion should the map canvas take vs editing controls?
-- Option A: 85/15 (canvas/panel) - simulator style
-- Option B: 70/30 (canvas/controls) - standard editor style  
-- Option C: 60/40 (canvas/controls) - balanced
-- **Constraint:** Must feel consistent with simulator
+**DECISION: Consistent with simulator**
+- Match simulator's visual style and proportions
+- Users should recognize the same map format in both editor and game
+- Exact proportions (85/15, 70/30, etc.) determined during planning phase
 
 ### Q2: Element Editing
-Can users modify elements after placing them (e.g., change AZN quantity, delete element)?
-- If yes: Need selection, properties panel, delete capability
-- If no: Can only place, not edit
+**DECISION: YES - Users can modify elements after placing**
+- Users can select placed elements
+- Users can edit properties (e.g., change AZN quantity)
+- Users can delete elements
+- Requires: Selection mechanism, properties display, delete action
 
 ### Q3: Validation
-Should editor warn users about potential issues (e.g., "no habitas points placed")?
-- If yes: What rules to enforce?
-- If no: Let users save anything valid JSON
+**DECISION: YES - Add validation warnings**
+- Editor should warn about potential issues
+- Rules to enforce:
+  - At least 1 habitas point (game requires scoring location)
+  - At least 1 injection zone per player (game requires spawn area)
+  - At least 1 AZN node (game requires resources)
+- Warnings are advisory (don't block save, just inform user)
 
 ### Q4: Coordinate Display
-Should editor show grid coordinates for precision placement?
-- If yes: Display on hover or in status bar
-- If no: Users place by visual inspection only
+**DECISION: YES - Show coordinates on hover**
+- Display grid coordinates (x, y) when user hovers over cells
+- Location: Status bar or tooltip
+- Helps with precision placement and communication ("place at 32,45")
 
 ### Q5: Map Templates
-Should editor offer starting templates (empty, sample layout, etc.)?
-- If yes: Which templates?
-- If no: Always start blank
+**DECISION: Use existing maps as templates**
+- No pre-made templates
+- User can load any existing map from res://maps/
+- Edit the loaded map
+- Save under a NEW name (not overwrite original)
+- This lets users reuse and modify good map designs
+
+### ADDITIONAL: Save With Any Name
+**REQUIREMENT: Support "Save As"**
+- When saving, user can specify any filename
+- Saves to user://maps/{filename}.json (or res://maps/ if appropriate)
+- Can save over existing maps or create new ones
+- Prevents accidental overwrite (confirm if filename exists)
+- Users can keep original and create variations
 
 ---
 
@@ -230,14 +264,18 @@ The editor is done when:
 1. ✓ User can paint all four terrain densities
 2. ✓ User can flood-fill regions with right-click
 3. ✓ User can place all element types
-4. ✓ User can load existing maps
-5. ✓ User can save created maps
-6. ✓ Saved maps load and work in simulator
-7. ✓ Undo reverts changes correctly
-8. ✓ Zoom/pan work smoothly
-9. ✓ No crashes or data corruption
-10. ✓ UI is consistent with simulator style
-11. ✓ User can complete all workflows in under 5 minutes per map
+4. ✓ User can select and modify placed elements (edit properties, delete)
+5. ✓ User can load existing maps (for editing or as templates)
+6. ✓ User can save maps with custom names (Save As)
+7. ✓ User can't accidentally overwrite without confirmation
+8. ✓ Map validation warnings display (at least 1 habitas, zone, AZN)
+9. ✓ Grid coordinates display on hover
+10. ✓ Saved maps load and work in simulator
+11. ✓ Undo reverts changes correctly
+12. ✓ Zoom/pan work smoothly
+13. ✓ No crashes or data corruption
+14. ✓ UI is consistent with simulator style
+15. ✓ User can complete all workflows in under 5 minutes per map
 
 ---
 
