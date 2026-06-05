@@ -15,6 +15,8 @@ var zoom: float = 1.0
 var pan: Vector2 = Vector2.ZERO
 var is_panning: bool = false
 var pan_start: Vector2 = Vector2.ZERO
+var is_painting: bool = false
+var last_painted_pos: Vector2 = Vector2.ZERO
 
 var sprites: Dictionary = {}
 
@@ -138,22 +140,81 @@ func _input(event: InputEvent) -> void:
 		queue_redraw()
 		return
 
-	# Paint tiles
-	if event is InputEventMouseButton and event.pressed:
-		var local_pos = get_local_mouse_position() - Vector2(0, 50)
-		var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
-		var x = int(grid_pos.x)
-		var y = int(grid_pos.y)
+	# Continuous painting with mouse motion
+	if event is InputEventMouseMotion and is_painting:
+		_paint_line(last_painted_pos, event.position)
+		last_painted_pos = event.position
+		queue_redraw()
+		return
 
-		if x >= 0 and x < map_width and y >= 0 and y < map_height:
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				grid[y][x] = selected_density
-				status_label.text = "Painted (%d,%d): %s | Zoom: %.1fx" % [x, y, selected_density, zoom]
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
+	# Paint tiles
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				is_painting = true
+				last_painted_pos = event.position
+				_paint_at(event.position)
+				queue_redraw()
+			else:
+				is_painting = false
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var local_pos = get_local_mouse_position() - Vector2(0, 50)
+			var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
+			var x = int(grid_pos.x)
+			var y = int(grid_pos.y)
+
+			if x >= 0 and x < map_width and y >= 0 and y < map_height:
 				_flood_fill(x, y, grid[y][x])
 				status_label.text = "Filled with: %s | Zoom: %.1fx" % [selected_density, zoom]
+				queue_redraw()
 
-			queue_redraw()
+func _paint_at(screen_pos: Vector2) -> void:
+	var local_pos = screen_pos - Vector2(0, 50)
+	var grid_pos = (local_pos - pan) / (TILE_SIZE * zoom)
+	var x = int(grid_pos.x)
+	var y = int(grid_pos.y)
+
+	if x >= 0 and x < map_width and y >= 0 and y < map_height:
+		grid[y][x] = selected_density
+		status_label.text = "Painting: %s | Zoom: %.1fx" % [selected_density, zoom]
+
+func _paint_line(from_pos: Vector2, to_pos: Vector2) -> void:
+	# Bresenham-like line painting between two points
+	var start_local = from_pos - Vector2(0, 50)
+	var end_local = to_pos - Vector2(0, 50)
+
+	var start_grid = (start_local - pan) / (TILE_SIZE * zoom)
+	var end_grid = (end_local - pan) / (TILE_SIZE * zoom)
+
+	var x0 = int(start_grid.x)
+	var y0 = int(start_grid.y)
+	var x1 = int(end_grid.x)
+	var y1 = int(end_grid.y)
+
+	# Bresenham's line algorithm
+	var dx = abs(x1 - x0)
+	var dy = abs(y1 - y0)
+	var sx = 1 if x1 > x0 else -1
+	var sy = 1 if y1 > y0 else -1
+	var err = dx - dy
+
+	var x = x0
+	var y = y0
+
+	while true:
+		if x >= 0 and x < map_width and y >= 0 and y < map_height:
+			grid[y][x] = selected_density
+
+		if x == x1 and y == y1:
+			break
+
+		var e2 = 2 * err
+		if e2 > -dy:
+			err -= dy
+			x += sx
+		if e2 < dx:
+			err += dx
+			y += sy
 
 func _flood_fill(start_x: int, start_y: int, target: String) -> void:
 	if start_x < 0 or start_x >= map_width or start_y < 0 or start_y >= map_height:
