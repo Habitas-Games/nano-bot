@@ -540,6 +540,29 @@ if event is InputEventMouseMotion and is_painting:
 - No accidental panning while editing (middle-click disabled)
 - Consistent with design: All tools require explicit selection
 
+### Phase 2 Feature: Stream Drag Placement
+
+**Implementation:** Stream tool now supports click-and-drag to place multiple streams, matching terrain painting behavior.
+
+**How It Works:**
+1. User selects stream tool
+2. Selects direction (NORTH, SOUTH, EAST, WEST)
+3. Clicks canvas and holds
+4. Drags across map to place streams
+5. Releases to stop
+
+**Technical Details:**
+- Reuses `is_painting` flag (works for all dragging tools)
+- Tracks `last_paint_pos` to avoid duplicate placement at same cell
+- Checks `active_tool == "stream"` in drag motion handler
+- Places streams directly in cells array with selected_stream_dir
+
+**Benefits:**
+- Consistent with terrain painting (familiar interaction)
+- Faster stream placement (no single-click repeated)
+- Same direction applied to all dragged streams
+- Prevents accidental duplicates
+
 ### Next Phase (Phase 2): Terrain Editing
 
 Required for terrain editing to work:

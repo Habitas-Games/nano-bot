@@ -142,8 +142,17 @@ func _activate_tool(tool_name: String) -> void:
   - Solution: Removed middle-click handler completely
   - Result: Users MUST select Pan tool to pan
 
+### Feature: Stream Drag Placement
+
+**Commit 27b8174:** Add stream drag placement - place multiple streams while dragging
+- **Feature:** Stream tool now supports drag-to-place (like terrain)
+- **Behavior:** Click + hold + drag to place streams continuously
+- **Direction:** All streams placed in selected direction
+- **Avoids Duplicates:** Tracks position to prevent duplicate placement
+- **Implementation:** Reuse is_painting and last_paint_pos for stream dragging
+
 ### ❌ Phase 3+: Not Started
-- [ ] Stream placement (direction selector + click)
+- [x] Stream placement (direction selector + click + drag) ✓ Done
 - [ ] Element placement (habitas, AZN, zones)
 - [ ] File save (JSON export)
 - [ ] Validation (map checking)
