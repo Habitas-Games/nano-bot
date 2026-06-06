@@ -120,6 +120,14 @@ func _activate_tool(tool_name: String) -> void:
 
 **Status:** Ready for testing - all Phase 2 terrain editing features implemented with proper tool isolation.
 
+### Bug Fix: Stream Rendering
+
+**Commit 7ada7a4:** Fix stream texture rendering - add fallback for missing textures
+- **Problem:** Last placed stream shows black instead of stream texture
+- **Root Cause:** If stream texture fails to load, only arrow lines draw
+- **Solution:** Added dark red fallback color if texture is null
+- **Benefit:** Debug info - black = texture loaded, dark red = texture missing
+
 ### ❌ Phase 3+: Not Started
 - [ ] Stream placement (direction selector + click)
 - [ ] Element placement (habitas, AZN, zones)

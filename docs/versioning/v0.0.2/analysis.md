@@ -506,6 +506,16 @@ if event is InputEventMouseMotion and is_painting:
 - Implementation proceeded without clear specification
 - Should have added input handling section to analysis before coding
 
+### Phase 2 Issue 3: Stream Texture Not Loading on First Placement
+
+**Problem Observed:** Last placed stream shows solid black instead of texture + arrow. Shows correctly after placing another stream or changing tools.
+
+**Root Cause:** If stream textures (tile_stream_h.png / tile_stream_v.png) fail to load or aren't available yet, only procedural arrow lines draw. This appears as thin red lines on dark background, or all black if arrow lines don't show.
+
+**Solution Implemented:** Add fallback rendering - if texture is null, draw dark red placeholder rect. This provides debug info: black background = texture loaded correctly, dark red background = texture failed to load.
+
+**Impact:** Helps identify texture loading issues and provides visual feedback that stream was placed (via arrow overlay) even if texture is missing.
+
 ### Next Phase (Phase 2): Terrain Editing
 
 Required for terrain editing to work:
