@@ -132,31 +132,29 @@ edit_drag_offset: Vector2i           # For moving
 
 ---
 
-## 6. Cursor Feedback
+## 6. Cursor Feedback ✅ LOCKED
 
-- **Edit Tool:** Cursor shows edit icon (crosshair or hand)
-- **Delete Tool:** Cursor shows delete icon (eraser or X)
+- **Edit Tool:** Pen cursor (visual pen icon for editing)
+- **Delete Tool:** Eraser cursor (visual eraser icon)
 - **Edit/Delete Hover:** Different cursor over elements vs. empty
   - Over element: Grab/hand cursor
   - Over empty: No change
 
 ---
 
-## 7. AZN Quantity Display (Hover)
+## 7. AZN Quantity Display (Hover) ✅ LOCKED
 
 ### When to Show
 - Any mode, any time
-- Hover cursor over AZN marker
+- Hover cursor over AZN marker → tooltip appears
 - Show for 0.5 seconds (short delay to avoid spam)
 
 ### How to Display
-- **Option A:** Tooltip (text label above marker)
+- **Tooltip (CHOSEN):**
+  - Small text label appears above marker
   - Shows "30" or "Quantity: 30"
-- **Option B:** Label permanently visible
-  - Small text next to each marker
-- **Option C:** Only in edit mode when selected
-
-**Question:** Which approach preferred?
+  - Disappears when cursor moves away
+  - Non-intrusive, clean
 
 ---
 
@@ -166,6 +164,22 @@ edit_drag_offset: Vector2i           # For moving
 Tool: Edit ✏️ | Click element to edit, drag to move
 Tool: Delete 🗑️ | Click + drag to erase terrain, streams, elements
 ```
+
+---
+
+## 8. Delete Undo Strategy ✅ LOCKED
+
+### Single State at Drag Start
+- When left-click pressed (drag starts): `_save_state()` captures entire map
+- During drag: Delete everything touched (no intermediate saves)
+- On release: Drag is complete
+- Undo: Restores entire map to pre-deletion state with one undo
+
+**Benefits:**
+- Simple implementation
+- User knows exactly what undo does
+- No spam of undo states during drag
+- Clear intent: "Delete now, one undo if mistake"
 
 ---
 
@@ -216,9 +230,14 @@ Tool: Delete 🗑️ | Click + drag to erase terrain, streams, elements
 - ✅ Edit mode for all element types
 - ✅ AZN quantity display on hover
 
-**Pending User Input:**
-1. AZN quantity display: Tooltip, permanent label, or edit-mode-only?
-2. Delete undo: State at start or continuously during drag?
-3. Edit cursor style preference?
+**ALL DECISIONS LOCKED:** ✅
 
-Once you clarify these, Phase 4 implementation begins.
+1. **AZN Quantity Display:** Tooltip (shows on hover, disappears when cursor moves)
+2. **Delete Undo:** Single state at drag start (undo = full restore)
+3. **Edit Cursor:** Pen icon (CURSOR_POINTING_HAND or visual pen)
+
+---
+
+## Implementation Ready
+
+All design decisions are locked. Phase 4 implementation can begin immediately.
