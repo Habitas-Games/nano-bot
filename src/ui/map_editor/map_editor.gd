@@ -245,6 +245,22 @@ func _setup_ui() -> void:
 	)
 	panel.add_child(pan_btn)
 
+	var edit_btn = Button.new()
+	edit_btn.text = "Edit ✏️"
+	edit_btn.custom_minimum_size = Vector2(0, 28)
+	edit_btn.pressed.connect(func():
+		_activate_tool("edit")
+	)
+	panel.add_child(edit_btn)
+
+	var delete_btn = Button.new()
+	delete_btn.text = "Delete 🗑️"
+	delete_btn.custom_minimum_size = Vector2(0, 28)
+	delete_btn.pressed.connect(func():
+		_activate_tool("delete")
+	)
+	panel.add_child(delete_btn)
+
 	var load_btn = Button.new()
 	load_btn.text = "Load"
 	load_btn.custom_minimum_size = Vector2(0, 28)
@@ -586,6 +602,13 @@ func _input(event: InputEvent) -> void:
 									queue_redraw()
 									get_tree().root.set_input_as_handled()
 									return
+								"delete":
+									is_painting = true
+									last_paint_pos = Vector2i(grid_x, grid_y)
+									_save_state()
+									_delete_at_position(grid_x, grid_y)
+									get_tree().root.set_input_as_handled()
+									return
 								"zone":
 									# Zone placement will be drag-based (not implemented yet)
 									pass
@@ -641,6 +664,13 @@ func _input(event: InputEvent) -> void:
 							cells[idx]["stream_dir"] = selected_stream_dir
 							last_paint_pos = Vector2i(grid_x, grid_y)
 							queue_redraw()
+					elif active_tool == "delete":
+						# Delete mode: drag to erase everything
+						brush_cursor_pos = Vector2i(grid_x, grid_y)
+						if Vector2i(grid_x, grid_y) != last_paint_pos:
+							_delete_at_position(grid_x, grid_y)
+							last_paint_pos = Vector2i(grid_x, grid_y)
+							queue_redraw()
 
 		get_tree().root.set_input_as_handled()
 		return
@@ -654,6 +684,27 @@ func _input(event: InputEvent) -> void:
 			set_default_cursor_shape(CURSOR_MOVE)
 		else:
 			set_default_cursor_shape(CURSOR_ARROW)
+
+func _delete_at_position(x: int, y: int) -> void:
+	"""Delete everything at grid position"""
+	if x < 0 or x >= map_width or y < 0 or y >= map_height:
+		return
+
+	# Delete terrain and streams
+	var idx = y * map_width + x
+	cells[idx]["density"] = Density.LOW
+	cells[idx]["stream_dir"] = StreamDir.NONE
+
+	# Delete habitas at this position
+	habitas_points = habitas_points.filter(func(hp): return hp != Vector2i(x, y))
+
+	# Delete AZN at this position
+	azn_nodes = azn_nodes.filter(func(azn): return azn["position"] != Vector2i(x, y))
+
+	# Delete zones containing this position
+	injection_zones = injection_zones.filter(func(zone):
+		return not zone["rect"].has_point(Vector2i(x, y))
+	)
 
 func _is_in_canvas(pos: Vector2) -> bool:
 	var cx = int(canvas_rect.position.x)
@@ -768,6 +819,10 @@ func _update_status() -> void:
 			status = "Tool: Place Zone | Drag to create rectangle"
 		"pan":
 			status = "Tool: Pan ✋ | Click + drag to move map"
+		"edit":
+			status = "Tool: Edit ✏️ | Click element to edit, drag to move"
+		"delete":
+			status = "Tool: Delete 🗑️ | Click + drag to erase terrain, streams, elements"
 
 	if status_label:
 		status_label.text = status
