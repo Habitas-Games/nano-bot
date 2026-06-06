@@ -563,6 +563,24 @@ if event is InputEventMouseMotion and is_painting:
 - Same direction applied to all dragged streams
 - Prevents accidental duplicates
 
+### Phase 2 Bug Fix: Clear Map and Add Border
+
+**Clear Map Issues Fixed:**
+1. **Problem:** Only cleared terrain density, left streams and all elements
+2. **Solution:** Now clears:
+   - Terrain density → Density.LOW
+   - Streams → StreamDir.NONE
+   - Habitas points array
+   - AZN nodes array
+   - Injection zones array
+3. **Result:** Completely blank map after clear
+
+**Add Border Feature Removed:**
+1. **Problem:** Misunderstood requirement copied from previous "junk editor"
+2. **Reason:** Not part of actual map editor design
+3. **Action:** Removed button and _add_border() function completely
+4. **Impact:** Clean Tools section, focus on core functionality
+
 ### Next Phase (Phase 2): Terrain Editing
 
 Required for terrain editing to work:

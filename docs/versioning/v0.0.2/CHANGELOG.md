@@ -151,7 +151,17 @@ func _activate_tool(tool_name: String) -> void:
 - **Avoids Duplicates:** Tracks position to prevent duplicate placement
 - **Implementation:** Reuse is_painting and last_paint_pos for stream dragging
 
-### ❌ Phase 3+: Not Started
+### Bug Fixes (Phase 2 Cleanup)
+
+**Commit 9c27c8c:** Fix Clear Map and remove Add Border feature
+- **Problem 1:** Clear Map only cleared terrain, left streams + elements
+  - Solution: Updated to clear density, streams, habitas, AZN, zones
+  - Result: Completely blank map after clear
+- **Problem 2:** Add Border was misunderstood requirement from old editor
+  - Solution: Removed button and function completely
+  - Reason: Not part of actual map editor design
+
+### ❌ Phase 4+: Not Started
 - [x] Stream placement (direction selector + click + drag) ✓ Done
 - [ ] Element placement (habitas, AZN, zones)
 - [ ] File save (JSON export)
