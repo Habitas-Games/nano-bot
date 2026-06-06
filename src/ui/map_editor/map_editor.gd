@@ -263,12 +263,6 @@ func _setup_ui() -> void:
 	clear_btn.pressed.connect(_clear_map)
 	panel.add_child(clear_btn)
 
-	var border_btn = Button.new()
-	border_btn.text = "Add Border"
-	border_btn.custom_minimum_size = Vector2(0, 28)
-	border_btn.pressed.connect(_add_border)
-	panel.add_child(border_btn)
-
 	panel.add_child(HSeparator.new())
 
 	# HISTORY SECTION
@@ -707,19 +701,19 @@ func _flood_fill(start_x: int, start_y: int) -> void:
 	queue_redraw()
 
 func _clear_map() -> void:
+	"""Clear entire map: terrain, streams, and all elements"""
 	_save_state()
+
+	# Clear terrain (density) and streams
 	for i in range(cells.size()):
 		cells[i]["density"] = Density.LOW
-	queue_redraw()
+		cells[i]["stream_dir"] = StreamDir.NONE
 
-func _add_border() -> void:
-	_save_state()
-	for x in range(map_width):
-		cells[0 * map_width + x]["density"] = Density.BONE
-		cells[(map_height - 1) * map_width + x]["density"] = Density.BONE
-	for y in range(map_height):
-		cells[y * map_width + 0]["density"] = Density.BONE
-		cells[y * map_width + (map_width - 1)]["density"] = Density.BONE
+	# Clear all elements
+	habitas_points.clear()
+	azn_nodes.clear()
+	injection_zones.clear()
+
 	queue_redraw()
 
 func _save_state() -> void:
