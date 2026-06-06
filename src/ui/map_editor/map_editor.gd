@@ -479,7 +479,8 @@ func _draw() -> void:
 			draw_rect(Rect2(screen_x, screen_y, size, size), GRID_COLOR, false)
 
 	# Draw injection zones
-	for zone in injection_zones:
+	for i in range(injection_zones.size()):
+		var zone = injection_zones[i]
 		var rect = zone["rect"]
 		var screen_x1 = cx + (rect.position.x * CELL_SIZE * zoom) - scroll_x
 		var screen_y1 = cy + (rect.position.y * CELL_SIZE * zoom) - scroll_y
@@ -488,20 +489,34 @@ func _draw() -> void:
 		var color = Color(0.25, 0.55, 1.0, 0.2) if zone["player"] == 0 else Color(1.0, 0.3, 0.25, 0.2)
 		draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), color)
 
+		# Highlight if selected
+		if edit_selected_type == "zone" and edit_selected_index == i:
+			draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), Color(1.0, 1.0, 1.0, 0.3))
+
 	# Draw habitas points
-	for hp in habitas_points:
+	for i in range(habitas_points.size()):
+		var hp = habitas_points[i]
 		var screen_x = cx + (hp.x * CELL_SIZE * zoom) - scroll_x
 		var screen_y = cy + (hp.y * CELL_SIZE * zoom) - scroll_y
 		if habitas_texture:
 			draw_texture_rect(habitas_texture, Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), false)
 
+		# Highlight if selected
+		if edit_selected_type == "habitas" and edit_selected_index == i:
+			draw_rect(Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), Color(1.0, 1.0, 0.0, 0.4))
+
 	# Draw AZN nodes
-	for azn in azn_nodes:
+	for i in range(azn_nodes.size()):
+		var azn = azn_nodes[i]
 		var pos = azn["position"]
 		var screen_x = cx + (pos.x * CELL_SIZE * zoom) - scroll_x
 		var screen_y = cy + (pos.y * CELL_SIZE * zoom) - scroll_y
 		if azn_texture:
 			draw_texture_rect(azn_texture, Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), false)
+
+		# Highlight if selected
+		if edit_selected_type == "azn" and edit_selected_index == i:
+			draw_rect(Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), Color(1.0, 1.0, 0.0, 0.4))
 
 func _draw_stream_cell(screen_x: float, screen_y: float, size: float, stream_dir: int) -> void:
 	# Draw stream background texture
