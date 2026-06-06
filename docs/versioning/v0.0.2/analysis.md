@@ -518,12 +518,69 @@ Required for terrain editing to work:
 
 ---
 
+## 10. User Feedback: Tool Mode Issues (DISCOVERED)
+
+**Problem Identified:** When selecting terrain buttons + stream direction buttons, both modes were active simultaneously. User could not have exclusive tool control.
+
+**Root Cause:** No concept of "active tool" - each mode (terrain, stream, elements) was checked independently in input handler.
+
+**Solution Discovered:** Implement exclusive tool mode where only ONE tool is active at a time.
+
+### Exclusive Tool Mode Architecture
+
+**Active Tool States:**
+```
+active_tool: String = "terrain" | "stream" | "habitas" | "azn" | "zone" | "pan"
+```
+
+**When tool activates:**
+1. `_activate_tool(tool_name)` called
+2. All editing state reset (`is_painting = false`, `brush_cursor_pos = -1`)
+3. Status bar updates to show active tool
+4. Cursor updates (hand for pan, arrow for others)
+
+**Input Priority (EXCLUSIVE):**
+- Only the active tool processes input
+- Left-click routes to active tool only
+- Right-click works only in terrain mode (flood fill)
+- Middle-click/pan: If pan tool active, overrides everything
+- No mode mixing or overlapping operations
+
+### Pan Tool (Explicit Control)
+
+**Why needed:** Users need clear, explicit pan/drag control with visual feedback (hand cursor).
+
+**Design:**
+- "Pan ✋" button in Tools section (like other tools)
+- When active: `active_tool = "pan"`
+- Left-click + drag moves map (not painting)
+- Hand cursor always visible in pan mode
+- Cursor automatically updates when tool changes
+
+**Benefits over middle-click pan:**
+- Explicit: User clicks tool button (clear intent)
+- Visual: Hand cursor feedback (what tool is active)
+- Exclusive: No accidental panning during editing
+- Consistent: Same tool model as terrain/stream/elements
+
+### Status Bar Feedback (Per Tool)
+
+Current implementation shows:
+- "Tool: Terrain (LOW) | Click: paint | Right-click: fill | Scroll: zoom"
+- "Tool: Stream (NORTH) | Click to place stream"
+- "Tool: Place Habitas | Click to place"
+- "Tool: Pan ✋ | Click + drag to move map"
+
+---
+
 ## 11. Next: Plan Phase
 
 With Phase 1 complete and analyzed, Phase 2 planning should specify:
-- Terrain editing tools (paint, fill)
-- Edit Phase 3: Element placement
-- Edit Phase 4: File I/O
-- Edit Phase 5: Polish
+- Terrain editing tools (paint, fill) ✓ (implemented with exclusive modes)
+- Pan tool (drag map) ✓ (implemented as explicit tool)
+- Phase 3: Stream placement (separate from terrain)
+- Phase 4: Element placement (separate from terrain)
+- Phase 5: File I/O
+- Phase 6: Polish
 
 All future phases build on Phase 1's correct rendering foundation.

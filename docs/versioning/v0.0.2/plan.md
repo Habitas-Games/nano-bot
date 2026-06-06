@@ -596,11 +596,82 @@ StreamDir.WEST → "west"
 - ✅ All textures loading
 - ✅ All enums correct (Density, StreamDir as integers)
 
-**Phase 2 🔄 READY TO START:**
+**Phase 2 🔄 IN PROGRESS:**
 - ✅ UI foundation in place
 - ✅ Input handling infrastructure ready
 - ✅ Coordinate math verified
 - ✅ Data model stable
 - ✅ Phase 2 implementation plan specified with code examples
+
+---
+
+## 7. Phase 2 Implementation Notes (User Feedback Driven)
+
+### Issue 1: Mode Mixing (FIXED)
+
+**Problem:** Selecting stream direction + terrain tile activated both modes simultaneously.
+
+**Solution:** Implement exclusive tool mode
+- Added `active_tool` variable
+- Only active tool processes input
+- Button clicks activate tool exclusively
+- Other tools automatically deactivate
+
+### Issue 2: Pan/Drag Control (ENHANCED)
+
+**Problem:** Pan via middle-click was implicit and uncontrolled; could mix with editing.
+
+**Solution:** Pan as explicit tool
+- "Pan ✋" button in Tools section (like terrain/stream/elements)
+- Activates pan mode with visual feedback (hand cursor)
+- Left-click drag when pan active = moves map
+- No painting or other operations in pan mode
+- Cursor automatically shows hand icon
+
+### Implementation Details Added to Code
+
+**Tool Activation Architecture:**
+```gdscript
+active_tool: String = "terrain" | "stream" | "habitas" | "azn" | "zone" | "pan"
+
+func _activate_tool(tool_name: String) -> void:
+  active_tool = tool_name
+  is_painting = false
+  brush_cursor_pos = Vector2i(-1, -1)
+  _update_status()
+  queue_redraw()
+```
+
+**Input Handler Routing:**
+```gdscript
+match active_tool:
+  "terrain": paint_cell()
+  "stream": place_stream()
+  "habitas": place_habitas()
+  "azn": place_azn()
+  "pan": pan_map()  # Left-click drag
+```
+
+**Cursor Feedback:**
+- Pan mode: Always shows CURSOR_MOVE (hand)
+- Other modes: Shows CURSOR_ARROW
+- Updates in real-time when tool changes
+
+**Status Bar (Per Tool):**
+- "Tool: Terrain (LOW) | Click: paint | Right-click: fill"
+- "Tool: Stream (NORTH) | Click to place stream"
+- "Tool: Pan ✋ | Click + drag to move map"
+
+### Testing Requirements (Phase 2)
+
+✅ Terrain painting works
+✅ Drag painting creates continuous paths
+✅ Flood fill fills connected regions
+✅ Brush indicator visible when dragging
+✅ Undo restores previous state
+✅ Pan tool moves map with hand cursor
+✅ Only one tool active at a time
+✅ Tool switching deactivates previous tool
+✅ Status bar updates correctly
 
 **Next Step:** Implement Phase 2 (terrain editing)
