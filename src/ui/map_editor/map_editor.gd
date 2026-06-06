@@ -45,6 +45,11 @@ var stream_buttons: Dictionary = {}
 var undo_btn: Button
 var brush_cursor_pos: Vector2i = Vector2i(-1, -1)
 
+# Edit mode state
+var edit_selected_type: String = ""  # "habitas", "azn", "zone"
+var edit_selected_index: int = -1
+var edit_drag_offset: Vector2i = Vector2i.ZERO
+
 # History
 var history: Array = []
 var history_index: int = -1
@@ -609,6 +614,23 @@ func _input(event: InputEvent) -> void:
 									_delete_at_position(grid_x, grid_y)
 									get_tree().root.set_input_as_handled()
 									return
+								"edit":
+									# Edit mode: click to select element
+									var element = _find_element_at(grid_x, grid_y)
+									if element["type"] != "none":
+										edit_selected_type = element["type"]
+										edit_selected_index = element["index"]
+										is_painting = true
+										_save_state()
+										_update_status()
+										queue_redraw()
+										get_tree().root.set_input_as_handled()
+										return
+									else:
+										# Click on empty area deselects
+										_deselect_edit_element()
+										get_tree().root.set_input_as_handled()
+										return
 								"zone":
 									# Zone placement will be drag-based (not implemented yet)
 									pass
@@ -671,6 +693,17 @@ func _input(event: InputEvent) -> void:
 							_delete_at_position(grid_x, grid_y)
 							last_paint_pos = Vector2i(grid_x, grid_y)
 							queue_redraw()
+					elif active_tool == "edit" and edit_selected_type != "":
+						# Edit mode: move selected element
+						if edit_selected_type == "habitas":
+							_move_habitas(edit_selected_index, Vector2i(grid_x, grid_y))
+						elif edit_selected_type == "azn":
+							_move_azn(edit_selected_index, Vector2i(grid_x, grid_y))
+						elif edit_selected_type == "zone":
+							var offset = Vector2i(grid_x, grid_y) - last_paint_pos
+							if offset != Vector2i.ZERO:
+								_move_zone(edit_selected_index, offset)
+								last_paint_pos = Vector2i(grid_x, grid_y)
 
 		get_tree().root.set_input_as_handled()
 		return
@@ -705,6 +738,56 @@ func _delete_at_position(x: int, y: int) -> void:
 	injection_zones = injection_zones.filter(func(zone):
 		return not zone["rect"].has_point(Vector2i(x, y))
 	)
+
+func _find_element_at(x: int, y: int) -> Dictionary:
+	"""Find which element (if any) is at grid position. Returns {type, index} or {type: 'none'}"""
+	var pos = Vector2i(x, y)
+
+	# Check habitas
+	for i in range(habitas_points.size()):
+		if habitas_points[i] == pos:
+			return {"type": "habitas", "index": i}
+
+	# Check AZN
+	for i in range(azn_nodes.size()):
+		if azn_nodes[i]["position"] == pos:
+			return {"type": "azn", "index": i}
+
+	# Check zones
+	for i in range(injection_zones.size()):
+		if injection_zones[i]["rect"].has_point(pos):
+			return {"type": "zone", "index": i}
+
+	return {"type": "none"}
+
+func _deselect_edit_element() -> void:
+	"""Deselect currently selected element"""
+	edit_selected_type = ""
+	edit_selected_index = -1
+	queue_redraw()
+
+func _move_habitas(index: int, new_pos: Vector2i) -> void:
+	"""Move habitas point to new position"""
+	if new_pos.x >= 0 and new_pos.x < map_width and new_pos.y >= 0 and new_pos.y < map_height:
+		habitas_points[index] = new_pos
+		queue_redraw()
+
+func _move_azn(index: int, new_pos: Vector2i) -> void:
+	"""Move AZN node to new position"""
+	if new_pos.x >= 0 and new_pos.x < map_width and new_pos.y >= 0 and new_pos.y < map_height:
+		azn_nodes[index]["position"] = new_pos
+		queue_redraw()
+
+func _move_zone(index: int, offset: Vector2i) -> void:
+	"""Move zone by offset"""
+	var zone = injection_zones[index]
+	var rect = zone["rect"]
+	var new_pos = rect.position + offset
+
+	# Check bounds
+	if new_pos.x >= 0 and new_pos.y >= 0 and new_pos.x + rect.size.x <= map_width and new_pos.y + rect.size.y <= map_height:
+		injection_zones[index]["rect"] = Rect2i(new_pos, rect.size)
+		queue_redraw()
 
 func _is_in_canvas(pos: Vector2) -> bool:
 	var cx = int(canvas_rect.position.x)
