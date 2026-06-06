@@ -1,9 +1,10 @@
 class_name MapEditor
 extends Control
 
-# Phase 1-2: Core Rendering + Terrain Editing
+# Phase 1-2: Core Rendering + Terrain Editing (Per Spec)
 
 const CELL_SIZE := 16
+const BRUSH_INDICATOR_SIZE := CELL_SIZE  # Visual brush indicator
 
 # Enums (match simulator)
 enum Density { LOW, MEDIUM, HIGH, BONE }
@@ -19,7 +20,7 @@ var azn_texture: Texture2D
 # Map state
 var map_width: int = 60
 var map_height: int = 60
-var cells: Array = []  # cells[y * width + x] = {density: int, stream_dir: int}
+var cells: Array = []
 var habitas_points: Array = []
 var azn_nodes: Array = []
 var injection_zones: Array = []
@@ -32,14 +33,27 @@ var canvas_rect: Rect2 = Rect2()
 
 # Editing state (Phase 2)
 var selected_density: int = Density.LOW
+var selected_stream_dir: int = StreamDir.NORTH
+var placement_mode: String = "none"  # "none", "habitas", "azn", "zone"
 var is_painting: bool = false
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
-var density_buttons: Dictionary = {}
+
+# UI References
 var status_label: Label
+var terrain_buttons: Dictionary = {}
+var stream_buttons: Dictionary = {}
+var undo_btn: Button
+var brush_cursor_pos: Vector2i = Vector2i(-1, -1)
+
+# History
+var history: Array = []
+var history_index: int = -1
+const MAX_HISTORY := 50
 
 # Constants
 const STREAM_COLOR := Color(0.70, 0.25, 0.25, 0.80)
 const GRID_COLOR := Color(0.00, 0.00, 0.00, 0.12)
+const BRUSH_COLOR := Color(1.0, 1.0, 1.0, 0.5)  # Highlight brush cell
 const MIN_ZOOM := 0.5
 const MAX_ZOOM := 3.0
 const ZOOM_STEP := 0.1
@@ -50,7 +64,6 @@ func _ready() -> void:
 	_load_default_map()
 
 func _load_textures() -> void:
-	"""Load all texture assets"""
 	terrain_textures[Density.LOW] = load("res://assets/tiles/tile_low.png")
 	terrain_textures[Density.MEDIUM] = load("res://assets/tiles/tile_medium.png")
 	terrain_textures[Density.HIGH] = load("res://assets/tiles/tile_high.png")
@@ -63,7 +76,6 @@ func _load_textures() -> void:
 	azn_texture = load("res://assets/markers/azn_node.png")
 
 func _setup_ui() -> void:
-	"""Create UI: toolbar, canvas area, and control panel"""
 	var root = HBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
@@ -75,7 +87,7 @@ func _setup_ui() -> void:
 
 	# Status bar
 	status_label = Label.new()
-	status_label.text = "Terrain: LOW | Click: paint | Drag: continuous | Right-click: fill | Scroll: zoom"
+	status_label.text = "Terrain: LOW | Click: paint | Right-click: fill | Scroll: zoom"
 	status_label.add_theme_font_size_override("font_size", 10)
 	status_label.custom_minimum_size = Vector2(0, 30)
 	left.add_child(status_label)
@@ -96,17 +108,7 @@ func _setup_ui() -> void:
 	save_btn.pressed.connect(_show_save_dialog)
 	toolbar.add_child(save_btn)
 
-	var clear_btn = Button.new()
-	clear_btn.text = "Clear"
-	clear_btn.pressed.connect(_clear_map)
-	toolbar.add_child(clear_btn)
-
-	var border_btn = Button.new()
-	border_btn.text = "Border"
-	border_btn.pressed.connect(_add_border)
-	toolbar.add_child(border_btn)
-
-	# Canvas spacer (will draw here)
+	# Canvas spacer
 	var spacer = Control.new()
 	spacer.custom_minimum_size = Vector2(0, 500)
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -117,9 +119,9 @@ func _setup_ui() -> void:
 	scroll_spacer.custom_minimum_size = Vector2(0, 15)
 	left.add_child(scroll_spacer)
 
-	# RIGHT: Info panel
+	# RIGHT: Control panel with expandable sections
 	var right = PanelContainer.new()
-	right.custom_minimum_size = Vector2(200, 0)
+	right.custom_minimum_size = Vector2(250, 0)
 	root.add_child(right)
 
 	var style = StyleBoxFlat.new()
@@ -131,35 +133,44 @@ func _setup_ui() -> void:
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	right.add_child(scroll)
 
-	var info = VBoxContainer.new()
-	info.add_theme_constant_override("separation", 8)
-	scroll.add_child(info)
+	var panel = VBoxContainer.new()
+	panel.add_theme_constant_override("separation", 8)
+	scroll.add_child(panel)
 
 	var title = Label.new()
 	title.text = "Map Editor"
 	title.add_theme_font_size_override("font_size", 14)
-	info.add_child(title)
+	panel.add_child(title)
 
-	var size_label = Label.new()
-	size_label.text = "Size: 60x60"
-	size_label.add_theme_font_size_override("font_size", 10)
-	info.add_child(size_label)
+	# TERRAIN SECTION
+	var terrain_header = Label.new()
+	terrain_header.text = "▼ Terrain"
+	terrain_header.add_theme_font_size_override("font_size", 11)
+	panel.add_child(terrain_header)
 
-	info.add_child(HSeparator.new())
-
-	# Density selector (Phase 2)
-	var terrain_title = Label.new()
-	terrain_title.text = "Terrain"
-	terrain_title.add_theme_font_size_override("font_size", 11)
-	info.add_child(terrain_title)
+	var terrain_grid = GridContainer.new()
+	terrain_grid.columns = 4
+	terrain_grid.add_theme_constant_override("h_separation", 2)
+	terrain_grid.add_theme_constant_override("v_separation", 2)
+	panel.add_child(terrain_grid)
 
 	for density_val in [Density.LOW, Density.MEDIUM, Density.HIGH, Density.BONE]:
 		var btn = Button.new()
-		var density_name = _density_to_string(density_val).to_upper()
-		btn.text = density_name
-		btn.custom_minimum_size = Vector2(0, 32)
+		btn.custom_minimum_size = Vector2(48, 48)
 		btn.toggle_mode = true
-		btn.button_pressed = (density_val == Density.LOW)
+		
+		# Set button texture/appearance
+		var tex = terrain_textures[density_val]
+		if tex:
+			btn.icon = tex
+			btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		
+		# Tooltip with cost
+		var cost_text = _get_density_cost_text(density_val)
+		btn.tooltip_text = cost_text
+		
+		if density_val == Density.LOW:
+			btn.button_pressed = true
 		
 		var density_copy = density_val
 		btn.pressed.connect(func():
@@ -168,14 +179,119 @@ func _setup_ui() -> void:
 			_update_status()
 		)
 		
-		info.add_child(btn)
-		density_buttons[density_val] = btn
+		terrain_grid.add_child(btn)
+		terrain_buttons[density_val] = btn
+
+	panel.add_child(HSeparator.new())
+
+	# STREAM SECTION
+	var stream_header = Label.new()
+	stream_header.text = "▼ Stream Direction"
+	stream_header.add_theme_font_size_override("font_size", 11)
+	panel.add_child(stream_header)
+
+	var stream_grid = GridContainer.new()
+	stream_grid.columns = 4
+	stream_grid.add_theme_constant_override("h_separation", 2)
+	stream_grid.add_theme_constant_override("v_separation", 2)
+	panel.add_child(stream_grid)
+
+	var directions = [
+		{dir: StreamDir.NORTH, label: "↑", hint: "N"},
+		{dir: StreamDir.SOUTH, label: "↓", hint: "S"},
+		{dir: StreamDir.EAST, label: "→", hint: "E"},
+		{dir: StreamDir.WEST, label: "←", hint: "W"},
+	]
+
+	for dir_data in directions:
+		var btn = Button.new()
+		btn.text = dir_data["label"]
+		btn.custom_minimum_size = Vector2(48, 48)
+		btn.toggle_mode = true
+		btn.tooltip_text = dir_data["hint"]
+		
+		if dir_data["dir"] == StreamDir.NORTH:
+			btn.button_pressed = true
+		
+		var dir_copy = dir_data["dir"]
+		btn.pressed.connect(func():
+			selected_stream_dir = dir_copy
+			_update_stream_buttons()
+			_update_status()
+		)
+		
+		stream_grid.add_child(btn)
+		stream_buttons[dir_data["dir"]] = btn
+
+	panel.add_child(HSeparator.new())
+
+	# ELEMENTS SECTION
+	var elem_header = Label.new()
+	elem_header.text = "▼ Elements"
+	elem_header.add_theme_font_size_override("font_size", 11)
+	panel.add_child(elem_header)
+
+	for elem_data in [
+		{name: "habitas", label: "Place Habitas"},
+		{name: "azn", label: "Place AZN"},
+		{name: "zone", label: "Place Zone"},
+	]:
+		var btn = Button.new()
+		btn.text = elem_data["label"]
+		btn.custom_minimum_size = Vector2(0, 28)
+		var mode_name = elem_data["name"]
+		btn.pressed.connect(func():
+			placement_mode = mode_name
+			_update_status()
+		)
+		panel.add_child(btn)
+
+	panel.add_child(HSeparator.new())
+
+	# TOOLS SECTION
+	var tools_header = Label.new()
+	tools_header.text = "▼ Tools"
+	tools_header.add_theme_font_size_override("font_size", 11)
+	panel.add_child(tools_header)
+
+	var clear_btn = Button.new()
+	clear_btn.text = "Clear Map"
+	clear_btn.custom_minimum_size = Vector2(0, 28)
+	clear_btn.pressed.connect(_clear_map)
+	panel.add_child(clear_btn)
+
+	var border_btn = Button.new()
+	border_btn.text = "Add Border"
+	border_btn.custom_minimum_size = Vector2(0, 28)
+	border_btn.pressed.connect(_add_border)
+	panel.add_child(border_btn)
+
+	panel.add_child(HSeparator.new())
+
+	# HISTORY SECTION
+	var history_header = Label.new()
+	history_header.text = "▼ History"
+	history_header.add_theme_font_size_override("font_size", 11)
+	panel.add_child(history_header)
+
+	undo_btn = Button.new()
+	undo_btn.text = "Undo"
+	undo_btn.custom_minimum_size = Vector2(0, 28)
+	undo_btn.disabled = true
+	undo_btn.pressed.connect(_undo)
+	panel.add_child(undo_btn)
+
+func _get_density_cost_text(density: int) -> String:
+	match density:
+		Density.LOW: return "LOW\n2 turns"
+		Density.MEDIUM: return "MEDIUM\n3 turns"
+		Density.HIGH: return "HIGH\n4 turns"
+		Density.BONE: return "BONE\nblocked"
+	return ""
 
 func _load_default_map() -> void:
-	"""Load first available map from res://maps/"""
 	var dir = DirAccess.open("res://maps/")
 	if not dir:
-		print("No maps directory")
 		_init_blank_map()
 		return
 
@@ -187,11 +303,9 @@ func _load_default_map() -> void:
 			return
 		file_name = dir.get_next()
 
-	print("No maps found, creating blank")
 	_init_blank_map()
 
 func _init_blank_map() -> void:
-	"""Create blank 60x60 map"""
 	map_width = 60
 	map_height = 60
 	cells.clear()
@@ -203,11 +317,9 @@ func _init_blank_map() -> void:
 	habitas_points.clear()
 	azn_nodes.clear()
 	injection_zones.clear()
-
 	queue_redraw()
 
 func _load_map_from_file(path: String) -> void:
-	"""Load map from JSON using simulator format"""
 	var file = FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		print("Cannot open: " + path)
@@ -220,17 +332,14 @@ func _load_map_from_file(path: String) -> void:
 
 	_init_blank_map()
 
-	# Load dimensions
 	map_width = data.get("width", 60)
 	map_height = data.get("height", 60)
 	cells.resize(map_width * map_height)
 
-	# Initialize all cells to default
 	var default_density = _string_to_density(data.get("default_density", "low"))
 	for i in range(cells.size()):
 		cells[i] = {"density": default_density, "stream_dir": StreamDir.NONE}
 
-	# Load cells with their density and stream
 	for cell_data in data.get("cells", []):
 		var x = cell_data.get("x", 0)
 		var y = cell_data.get("y", 0)
@@ -244,12 +353,10 @@ func _load_map_from_file(path: String) -> void:
 		var idx = y * map_width + x
 		cells[idx] = {"density": density, "stream_dir": stream_dir}
 
-	# Load habitas points
 	habitas_points.clear()
 	for hp in data.get("habitas_points", []):
 		habitas_points.append(Vector2i(hp.get("x", 0), hp.get("y", 0)))
 
-	# Load AZN nodes
 	azn_nodes.clear()
 	for azn in data.get("azn_nodes", []):
 		azn_nodes.append({
@@ -257,7 +364,6 @@ func _load_map_from_file(path: String) -> void:
 			"quantity": azn.get("quantity", 10)
 		})
 
-	# Load injection zones
 	injection_zones.clear()
 	for zone in data.get("injection_zones", []):
 		var x1 = zone.get("x1", 0)
@@ -272,11 +378,14 @@ func _load_map_from_file(path: String) -> void:
 	zoom = 1.0
 	scroll_x = 0
 	scroll_y = 0
+	history.clear()
+	history_index = -1
+	_save_state()
 
+	_update_status()
 	queue_redraw()
 
 func _string_to_density(s: String) -> int:
-	"""Convert string to Density enum"""
 	match s:
 		"low": return Density.LOW
 		"medium": return Density.MEDIUM
@@ -285,7 +394,6 @@ func _string_to_density(s: String) -> int:
 	return Density.LOW
 
 func _density_to_string(d: int) -> String:
-	"""Convert Density enum to string"""
 	match d:
 		Density.LOW: return "low"
 		Density.MEDIUM: return "medium"
@@ -294,7 +402,6 @@ func _density_to_string(d: int) -> String:
 	return "low"
 
 func _string_to_stream_dir(s: String) -> int:
-	"""Convert string to StreamDir enum"""
 	match s:
 		"north": return StreamDir.NORTH
 		"south": return StreamDir.SOUTH
@@ -302,16 +409,21 @@ func _string_to_stream_dir(s: String) -> int:
 		"west": return StreamDir.WEST
 	return StreamDir.NONE
 
+func _stream_dir_to_string(d: int) -> String:
+	match d:
+		StreamDir.NORTH: return "north"
+		StreamDir.SOUTH: return "south"
+		StreamDir.EAST: return "east"
+		StreamDir.WEST: return "west"
+	return ""
+
 func _draw() -> void:
-	"""Render the map exactly like simulator"""
-	# Calculate canvas area
-	canvas_rect = Rect2(0, 30, get_size().x - 200, get_size().y - 45)
+	canvas_rect = Rect2(0, 30, get_size().x - 250, get_size().y - 45)
 	var cx = int(canvas_rect.position.x)
 	var cy = int(canvas_rect.position.y)
 	var cw = int(canvas_rect.size.x)
 	var ch = int(canvas_rect.size.y)
 
-	# Background
 	draw_rect(Rect2(cx, cy, cw, ch), Color(0.2, 0.2, 0.2))
 
 	# Draw cells
@@ -326,7 +438,6 @@ func _draw() -> void:
 			var screen_y = cy + (y * CELL_SIZE * zoom) - scroll_y
 			var size = CELL_SIZE * zoom
 
-			# Skip if off-screen
 			if screen_x + size < cx or screen_x > cx + cw:
 				continue
 			if screen_y + size < cy or screen_y > cy + ch:
@@ -334,15 +445,17 @@ func _draw() -> void:
 
 			# Draw cell content
 			if stream_dir == StreamDir.NONE:
-				# Regular terrain cell
 				var tex = terrain_textures[density]
 				if tex:
 					draw_texture_rect(tex, Rect2(screen_x, screen_y, size, size), false)
 				else:
 					draw_rect(Rect2(screen_x, screen_y, size, size), Color.GRAY)
 			else:
-				# Stream cell: texture + arrow
 				_draw_stream_cell(screen_x, screen_y, size, stream_dir)
+
+			# Brush indicator (when painting)
+			if Vector2i(x, y) == brush_cursor_pos:
+				draw_rect(Rect2(screen_x, screen_y, size, size), BRUSH_COLOR, false, 2.0)
 
 			# Grid line
 			draw_rect(Rect2(screen_x, screen_y, size, size), GRID_COLOR, false)
@@ -354,7 +467,6 @@ func _draw() -> void:
 		var screen_y1 = cy + (rect.position.y * CELL_SIZE * zoom) - scroll_y
 		var screen_x2 = cx + ((rect.position.x + rect.size.x) * CELL_SIZE * zoom) - scroll_x
 		var screen_y2 = cy + ((rect.position.y + rect.size.y) * CELL_SIZE * zoom) - scroll_y
-
 		var color = Color(0.25, 0.55, 1.0, 0.2) if zone["player"] == 0 else Color(1.0, 0.3, 0.25, 0.2)
 		draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), color)
 
@@ -374,39 +486,33 @@ func _draw() -> void:
 			draw_texture_rect(azn_texture, Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), false)
 
 func _draw_stream_cell(screen_x: float, screen_y: float, size: float, stream_dir: int) -> void:
-	"""Draw stream texture + procedural arrow overlay"""
-	# Draw stream background texture
 	if stream_dir in [StreamDir.EAST, StreamDir.WEST]:
 		if stream_h_texture:
 			if stream_dir == StreamDir.WEST:
 				draw_texture_rect(stream_h_texture, Rect2(screen_x + size, screen_y, -size, size), false)
 			else:
 				draw_texture_rect(stream_h_texture, Rect2(screen_x, screen_y, size, size), false)
-	else:  # NORTH, SOUTH
+	else:
 		if stream_v_texture:
 			if stream_dir == StreamDir.NORTH:
 				draw_texture_rect(stream_v_texture, Rect2(screen_x, screen_y + size, size, -size), false)
 			else:
 				draw_texture_rect(stream_v_texture, Rect2(screen_x, screen_y, size, size), false)
 
-	# Draw procedural arrow overlay
 	var center = Vector2(screen_x + size * 0.5, screen_y + size * 0.5)
 	var direction = _stream_to_vec(stream_dir)
 	var arrow_length = size * 0.5 - 3.5
 
-	# Arrow shaft
 	var base = center - direction * arrow_length * 0.5
 	var tip = center + direction * arrow_length
 	draw_line(base, tip, STREAM_COLOR, 1.5)
 
-	# Arrowhead (2 perpendicular lines)
 	var perp = Vector2(-direction.y, direction.x) * 2.5
 	var head_base = tip - direction * 3.5
 	draw_line(tip, head_base + perp, STREAM_COLOR, 1.5)
 	draw_line(tip, head_base - perp, STREAM_COLOR, 1.5)
 
 func _stream_to_vec(dir: int) -> Vector2:
-	"""Convert stream direction to unit vector"""
 	match dir:
 		StreamDir.NORTH: return Vector2(0, -1)
 		StreamDir.SOUTH: return Vector2(0, 1)
@@ -415,13 +521,12 @@ func _stream_to_vec(dir: int) -> Vector2:
 	return Vector2.ZERO
 
 func _input(event: InputEvent) -> void:
-	"""Handle all input: zoom, pan, painting, filling"""
 	var cx = int(canvas_rect.position.x)
 	var cy = int(canvas_rect.position.y)
 	var cw = int(canvas_rect.size.x)
 	var ch = int(canvas_rect.size.y)
 
-	# Zoom with scroll wheel
+	# Zoom
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			zoom = min(zoom + ZOOM_STEP, MAX_ZOOM)
@@ -448,9 +553,11 @@ func _input(event: InputEvent) -> void:
 					get_tree().root.set_input_as_handled()
 					return
 
-		# Left release: stop painting
+		# Left release
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			is_painting = false
+			brush_cursor_pos = Vector2i(-1, -1)
+			queue_redraw()
 
 		# Right click: flood fill
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
@@ -460,11 +567,12 @@ func _input(event: InputEvent) -> void:
 				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
 				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+					_save_state()
 					_flood_fill(grid_x, grid_y)
 					get_tree().root.set_input_as_handled()
 					return
 
-	# Drag paint (input priority: painting has exclusive input)
+	# Drag paint (exclusive input)
 	if event is InputEventMouseMotion and is_painting:
 		var local_pos = event.position
 		if _is_in_canvas(local_pos):
@@ -472,15 +580,15 @@ func _input(event: InputEvent) -> void:
 			var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
 			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				brush_cursor_pos = Vector2i(grid_x, grid_y)
 				if Vector2i(grid_x, grid_y) != last_paint_pos:
 					_paint_cell(grid_x, grid_y)
 					last_paint_pos = Vector2i(grid_x, grid_y)
 
-		# Consume input: painting has exclusive input, prevents event propagation
 		get_tree().root.set_input_as_handled()
 		return
 
-	# Pan with middle-click drag
+	# Pan (middle-click drag)
 	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MIDDLE:
 		var delta = event.relative
 		var max_x = max(0, int(map_width * CELL_SIZE * zoom - cw))
@@ -490,7 +598,6 @@ func _input(event: InputEvent) -> void:
 		queue_redraw()
 
 func _is_in_canvas(pos: Vector2) -> bool:
-	"""Check if position is inside canvas area"""
 	var cx = int(canvas_rect.position.x)
 	var cy = int(canvas_rect.position.y)
 	var cw = int(canvas_rect.size.x)
@@ -498,14 +605,11 @@ func _is_in_canvas(pos: Vector2) -> bool:
 	return pos.x >= cx and pos.x < cx + cw and pos.y >= cy and pos.y < cy + ch
 
 func _paint_cell(x: int, y: int) -> void:
-	"""Paint single cell with selected density (preserve stream_dir)"""
 	var idx = y * map_width + x
 	cells[idx]["density"] = selected_density
-	# stream_dir is preserved
 	queue_redraw()
 
 func _flood_fill(start_x: int, start_y: int) -> void:
-	"""Flood fill connected region with same density"""
 	var start_idx = start_y * map_width + start_x
 	var target_density = cells[start_idx]["density"]
 
@@ -539,38 +643,73 @@ func _flood_fill(start_x: int, start_y: int) -> void:
 	queue_redraw()
 
 func _clear_map() -> void:
-	"""Clear terrain to LOW density (preserve streams)"""
+	_save_state()
 	for i in range(cells.size()):
 		cells[i]["density"] = Density.LOW
-		# stream_dir preserved
 	queue_redraw()
 
 func _add_border() -> void:
-	"""Add BONE border around map edge"""
-	# Top and bottom edges
+	_save_state()
 	for x in range(map_width):
 		cells[0 * map_width + x]["density"] = Density.BONE
 		cells[(map_height - 1) * map_width + x]["density"] = Density.BONE
-
-	# Left and right edges
 	for y in range(map_height):
 		cells[y * map_width + 0]["density"] = Density.BONE
 		cells[y * map_width + (map_width - 1)]["density"] = Density.BONE
-
 	queue_redraw()
 
+func _save_state() -> void:
+	if history_index < history.size() - 1:
+		history.resize(history_index + 1)
+
+	var state: Array = []
+	for row in cells:
+		state.append(row.duplicate())
+	history.append(state)
+	history_index = history.size() - 1
+
+	if history.size() > MAX_HISTORY:
+		history.pop_front()
+		history_index -= 1
+
+	if undo_btn:
+		undo_btn.disabled = (history_index <= 0)
+
+func _undo() -> void:
+	if history_index > 0:
+		history_index -= 1
+		cells.clear()
+		for row in history[history_index]:
+			cells.append(row.duplicate())
+		queue_redraw()
+		if undo_btn:
+			undo_btn.disabled = (history_index <= 0)
+
 func _update_density_buttons() -> void:
-	"""Update button highlight to show selected density"""
-	for density_val in density_buttons.keys():
-		density_buttons[density_val].button_pressed = (density_val == selected_density)
+	for density_val in terrain_buttons.keys():
+		terrain_buttons[density_val].button_pressed = (density_val == selected_density)
+
+func _update_stream_buttons() -> void:
+	for stream_val in stream_buttons.keys():
+		stream_buttons[stream_val].button_pressed = (stream_val == selected_stream_dir)
 
 func _update_status() -> void:
-	"""Update status bar with current tool"""
-	var density_name = _density_to_string(selected_density).to_upper()
-	status_label.text = "Terrain: %s | Click: paint | Drag: continuous | Right-click: fill | Scroll: zoom" % density_name
+	var status = ""
+	match placement_mode:
+		"habitas":
+			status = "Mode: Place Habitas | Click to place, drag to move"
+		"azn":
+			status = "Mode: Place AZN | Click to place, drag to move"
+		"zone":
+			status = "Mode: Place Zone | Drag to create"
+		_:
+			var density_name = _density_to_string(selected_density).to_upper()
+			status = "Terrain: %s | Click: paint | Right-click: fill | Scroll: zoom" % density_name
+
+	if status_label:
+		status_label.text = status
 
 func _show_load_dialog() -> void:
-	"""Show load map dialog"""
 	var dir = DirAccess.open("res://maps/")
 	if not dir:
 		print("Maps directory not found")
@@ -602,5 +741,4 @@ func _show_load_dialog() -> void:
 	popup.popup_centered_ratio(0.3)
 
 func _show_save_dialog() -> void:
-	"""Show save map dialog"""
 	print("Save not yet implemented (Phase 5)")
