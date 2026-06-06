@@ -237,6 +237,14 @@ func _setup_ui() -> void:
 	tools_header.add_theme_font_size_override("font_size", 11)
 	panel.add_child(tools_header)
 
+	var pan_btn = Button.new()
+	pan_btn.text = "Pan ✋"
+	pan_btn.custom_minimum_size = Vector2(0, 28)
+	pan_btn.pressed.connect(func():
+		_activate_tool("pan")
+	)
+	panel.add_child(pan_btn)
+
 	var load_btn = Button.new()
 	load_btn.text = "Load"
 	load_btn.custom_minimum_size = Vector2(0, 28)
@@ -538,40 +546,48 @@ func _input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			var local_pos = event.position
 			if _is_in_canvas(local_pos):
-				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
-				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+				match active_tool:
+					"pan":
+						# Pan tool: start panning with left-click drag
+						is_painting = true
+						get_tree().root.set_input_as_handled()
+						return
+					_:
+						# Other tools: grid-based operations
+						var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+						var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
-				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-					match active_tool:
-						"terrain":
-							is_painting = true
-							last_paint_pos = Vector2i(grid_x, grid_y)
-							_save_state()
-							_paint_cell(grid_x, grid_y)
-							get_tree().root.set_input_as_handled()
-							return
-						"stream":
-							_save_state()
-							var idx = grid_y * map_width + grid_x
-							cells[idx]["stream_dir"] = selected_stream_dir
-							queue_redraw()
-							get_tree().root.set_input_as_handled()
-							return
-						"habitas":
-							_save_state()
-							habitas_points.append(Vector2i(grid_x, grid_y))
-							queue_redraw()
-							get_tree().root.set_input_as_handled()
-							return
-						"azn":
-							_save_state()
-							azn_nodes.append({"position": Vector2i(grid_x, grid_y), "quantity": 30})
-							queue_redraw()
-							get_tree().root.set_input_as_handled()
-							return
-						"zone":
-							# Zone placement will be drag-based (not implemented yet)
-							pass
+						if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+							match active_tool:
+								"terrain":
+									is_painting = true
+									last_paint_pos = Vector2i(grid_x, grid_y)
+									_save_state()
+									_paint_cell(grid_x, grid_y)
+									get_tree().root.set_input_as_handled()
+									return
+								"stream":
+									_save_state()
+									var idx = grid_y * map_width + grid_x
+									cells[idx]["stream_dir"] = selected_stream_dir
+									queue_redraw()
+									get_tree().root.set_input_as_handled()
+									return
+								"habitas":
+									_save_state()
+									habitas_points.append(Vector2i(grid_x, grid_y))
+									queue_redraw()
+									get_tree().root.set_input_as_handled()
+									return
+								"azn":
+									_save_state()
+									azn_nodes.append({"position": Vector2i(grid_x, grid_y), "quantity": 30})
+									queue_redraw()
+									get_tree().root.set_input_as_handled()
+									return
+								"zone":
+									# Zone placement will be drag-based (not implemented yet)
+									pass
 
 		# Left release
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
@@ -592,18 +608,29 @@ func _input(event: InputEvent) -> void:
 					get_tree().root.set_input_as_handled()
 					return
 
-	# Drag paint (exclusive input)
+	# Drag operations (exclusive input when is_painting)
 	if event is InputEventMouseMotion and is_painting:
-		var local_pos = event.position
-		if _is_in_canvas(local_pos):
-			var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
-			var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+		if active_tool == "pan":
+			# Pan mode: drag to move map
+			set_default_cursor_shape(CURSOR_MOVE)
+			var delta = event.relative
+			var max_x = max(0, int(map_width * CELL_SIZE * zoom - cw))
+			var max_y = max(0, int(map_height * CELL_SIZE * zoom - ch))
+			scroll_x = clampi(scroll_x - int(delta.x), 0, max_x)
+			scroll_y = clampi(scroll_y - int(delta.y), 0, max_y)
+			queue_redraw()
+		else:
+			# Paint mode: drag to paint
+			var local_pos = event.position
+			if _is_in_canvas(local_pos):
+				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
-			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-				brush_cursor_pos = Vector2i(grid_x, grid_y)
-				if Vector2i(grid_x, grid_y) != last_paint_pos:
-					_paint_cell(grid_x, grid_y)
-					last_paint_pos = Vector2i(grid_x, grid_y)
+				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+					brush_cursor_pos = Vector2i(grid_x, grid_y)
+					if Vector2i(grid_x, grid_y) != last_paint_pos:
+						_paint_cell(grid_x, grid_y)
+						last_paint_pos = Vector2i(grid_x, grid_y)
 
 		get_tree().root.set_input_as_handled()
 		return
@@ -619,9 +646,12 @@ func _input(event: InputEvent) -> void:
 		queue_redraw()
 		return
 
-	# Reset cursor when not panning
+	# Update cursor based on active tool
 	if event is InputEventMouseMotion:
-		set_default_cursor_shape(CURSOR_ARROW)
+		if active_tool == "pan":
+			set_default_cursor_shape(CURSOR_MOVE)
+		else:
+			set_default_cursor_shape(CURSOR_ARROW)
 
 func _is_in_canvas(pos: Vector2) -> bool:
 	var cx = int(canvas_rect.position.x)
@@ -734,6 +764,8 @@ func _update_status() -> void:
 			status = "Tool: Place AZN | Click to place"
 		"zone":
 			status = "Tool: Place Zone | Drag to create rectangle"
+		"pan":
+			status = "Tool: Pan ✋ | Click + drag to move map"
 
 	if status_label:
 		status_label.text = status
