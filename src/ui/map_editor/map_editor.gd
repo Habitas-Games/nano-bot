@@ -640,16 +640,8 @@ func _input(event: InputEvent) -> void:
 		get_tree().root.set_input_as_handled()
 		return
 
-	# Pan (middle-click drag) with hand cursor
-	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MIDDLE:
-		set_default_cursor_shape(CURSOR_MOVE)
-		var delta = event.relative
-		var max_x = max(0, int(map_width * CELL_SIZE * zoom - cw))
-		var max_y = max(0, int(map_height * CELL_SIZE * zoom - ch))
-		scroll_x = clampi(scroll_x - int(delta.x), 0, max_x)
-		scroll_y = clampi(scroll_y - int(delta.y), 0, max_y)
-		queue_redraw()
-		return
+	# Middle-click is disabled - use Pan tool instead for explicit control
+	# (Pan tool is in Tools section and uses left-click drag)
 
 	# Update cursor based on active tool
 	if event is InputEventMouseMotion:
@@ -783,11 +775,18 @@ func _stream_dir_to_name(dir: int) -> String:
 		StreamDir.WEST: return "WEST"
 	return "NONE"
 
-func _activate_tool(tool_name: String) -> void:
-	"""Activate a tool exclusively - deactivates all other tools"""
-	active_tool = tool_name
+func _deactivate_all_tools() -> void:
+	"""Completely deactivate all tools - called before activating a new one"""
+	# Reset all editing state
 	is_painting = false
 	brush_cursor_pos = Vector2i(-1, -1)
+	# Don't modify selected_density or selected_stream_dir - user preference
+	# Only reset active state
+
+func _activate_tool(tool_name: String) -> void:
+	"""Activate a tool exclusively - deactivates all other tools first"""
+	_deactivate_all_tools()
+	active_tool = tool_name
 	_update_status()
 	queue_redraw()
 
