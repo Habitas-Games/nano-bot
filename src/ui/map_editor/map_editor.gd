@@ -197,10 +197,10 @@ func _setup_ui() -> void:
 	panel.add_child(stream_grid)
 
 	var directions = [
-		{dir: StreamDir.NORTH, label: "↑", hint: "N"},
-		{dir: StreamDir.SOUTH, label: "↓", hint: "S"},
-		{dir: StreamDir.EAST, label: "→", hint: "E"},
-		{dir: StreamDir.WEST, label: "←", hint: "W"},
+		{"dir": StreamDir.NORTH, "label": "↑", "hint": "N"},
+		{"dir": StreamDir.SOUTH, "label": "↓", "hint": "S"},
+		{"dir": StreamDir.EAST, "label": "→", "hint": "E"},
+		{"dir": StreamDir.WEST, "label": "←", "hint": "W"},
 	]
 
 	for dir_data in directions:
@@ -232,9 +232,9 @@ func _setup_ui() -> void:
 	panel.add_child(elem_header)
 
 	for elem_data in [
-		{name: "habitas", label: "Place Habitas"},
-		{name: "azn", label: "Place AZN"},
-		{name: "zone", label: "Place Zone"},
+		{"name": "habitas", "label": "Place Habitas"},
+		{"name": "azn", "label": "Place AZN"},
+		{"name": "zone", "label": "Place Zone"},
 	]:
 		var btn = Button.new()
 		btn.text = elem_data["label"]
