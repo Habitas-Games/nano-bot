@@ -92,21 +92,7 @@ func _setup_ui() -> void:
 	status_label.custom_minimum_size = Vector2(0, 30)
 	left.add_child(status_label)
 
-	# Toolbar
-	var toolbar = HBoxContainer.new()
-	toolbar.custom_minimum_size = Vector2(0, 40)
-	toolbar.add_theme_constant_override("separation", 5)
-	left.add_child(toolbar)
-
-	var load_btn = Button.new()
-	load_btn.text = "Load"
-	load_btn.pressed.connect(_show_load_dialog)
-	toolbar.add_child(load_btn)
-
-	var save_btn = Button.new()
-	save_btn.text = "Save"
-	save_btn.pressed.connect(_show_save_dialog)
-	toolbar.add_child(save_btn)
+	# Toolbar (empty for now - buttons moved to right panel)
 
 	# Canvas spacer
 	var spacer = Control.new()
@@ -253,6 +239,18 @@ func _setup_ui() -> void:
 	tools_header.text = "▼ Tools"
 	tools_header.add_theme_font_size_override("font_size", 11)
 	panel.add_child(tools_header)
+
+	var load_btn = Button.new()
+	load_btn.text = "Load"
+	load_btn.custom_minimum_size = Vector2(0, 28)
+	load_btn.pressed.connect(_show_load_dialog)
+	panel.add_child(load_btn)
+
+	var save_btn = Button.new()
+	save_btn.text = "Save"
+	save_btn.custom_minimum_size = Vector2(0, 28)
+	save_btn.pressed.connect(_show_save_dialog)
+	panel.add_child(save_btn)
 
 	var clear_btn = Button.new()
 	clear_btn.text = "Clear Map"
