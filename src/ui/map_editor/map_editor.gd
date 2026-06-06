@@ -572,6 +572,8 @@ func _input(event: InputEvent) -> void:
 									get_tree().root.set_input_as_handled()
 									return
 								"stream":
+									is_painting = true
+									last_paint_pos = Vector2i(grid_x, grid_y)
 									_save_state()
 									var idx = grid_y * map_width + grid_x
 									cells[idx]["stream_dir"] = selected_stream_dir
@@ -625,17 +627,26 @@ func _input(event: InputEvent) -> void:
 			scroll_y = clampi(scroll_y - int(delta.y), 0, max_y)
 			queue_redraw()
 		else:
-			# Paint mode: drag to paint
+			# Terrain paint or stream drag mode
 			var local_pos = event.position
 			if _is_in_canvas(local_pos):
 				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
 				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
 				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-					brush_cursor_pos = Vector2i(grid_x, grid_y)
-					if Vector2i(grid_x, grid_y) != last_paint_pos:
-						_paint_cell(grid_x, grid_y)
-						last_paint_pos = Vector2i(grid_x, grid_y)
+					if active_tool == "terrain":
+						# Terrain paint: drag to paint
+						brush_cursor_pos = Vector2i(grid_x, grid_y)
+						if Vector2i(grid_x, grid_y) != last_paint_pos:
+							_paint_cell(grid_x, grid_y)
+							last_paint_pos = Vector2i(grid_x, grid_y)
+					elif active_tool == "stream":
+						# Stream placement: drag to place streams
+						if Vector2i(grid_x, grid_y) != last_paint_pos:
+							var idx = grid_y * map_width + grid_x
+							cells[idx]["stream_dir"] = selected_stream_dir
+							last_paint_pos = Vector2i(grid_x, grid_y)
+							queue_redraw()
 
 		get_tree().root.set_input_as_handled()
 		return
