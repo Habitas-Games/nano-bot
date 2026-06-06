@@ -32,9 +32,9 @@ var scroll_y: int = 0
 var canvas_rect: Rect2 = Rect2()
 
 # Editing state (Phase 2)
+var active_tool: String = "terrain"  # "terrain", "stream", "habitas", "azn", "zone"
 var selected_density: int = Density.LOW
 var selected_stream_dir: int = StreamDir.NORTH
-var placement_mode: String = "none"  # "none", "habitas", "azn", "zone"
 var is_painting: bool = false
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
 
@@ -155,6 +155,7 @@ func _setup_ui() -> void:
 		
 		var density_copy = density_val
 		btn.pressed.connect(func():
+			_activate_tool("terrain")
 			selected_density = density_copy
 			_update_density_buttons()
 			_update_status()
@@ -196,6 +197,7 @@ func _setup_ui() -> void:
 		
 		var dir_copy = dir_data["dir"]
 		btn.pressed.connect(func():
+			_activate_tool("stream")
 			selected_stream_dir = dir_copy
 			_update_stream_buttons()
 			_update_status()
@@ -222,7 +224,7 @@ func _setup_ui() -> void:
 		btn.custom_minimum_size = Vector2(0, 28)
 		var mode_name = elem_data["name"]
 		btn.pressed.connect(func():
-			placement_mode = mode_name
+			_activate_tool(mode_name)
 			_update_status()
 		)
 		panel.add_child(btn)
@@ -532,7 +534,7 @@ func _input(event: InputEvent) -> void:
 			get_tree().root.set_input_as_handled()
 			return
 
-		# Left click: paint, stream, or element placement
+		# Left click: tool-dependent action
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			var local_pos = event.position
 			if _is_in_canvas(local_pos):
@@ -540,17 +542,21 @@ func _input(event: InputEvent) -> void:
 				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
 				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
-					# Stream placement mode
-					if selected_stream_dir != StreamDir.NONE:
-						_save_state()
-						var idx = grid_y * map_width + grid_x
-						cells[idx]["stream_dir"] = selected_stream_dir
-						queue_redraw()
-						get_tree().root.set_input_as_handled()
-						return
-
-					# Element placement mode
-					match placement_mode:
+					match active_tool:
+						"terrain":
+							is_painting = true
+							last_paint_pos = Vector2i(grid_x, grid_y)
+							_save_state()
+							_paint_cell(grid_x, grid_y)
+							get_tree().root.set_input_as_handled()
+							return
+						"stream":
+							_save_state()
+							var idx = grid_y * map_width + grid_x
+							cells[idx]["stream_dir"] = selected_stream_dir
+							queue_redraw()
+							get_tree().root.set_input_as_handled()
+							return
 						"habitas":
 							_save_state()
 							habitas_points.append(Vector2i(grid_x, grid_y))
@@ -567,21 +573,14 @@ func _input(event: InputEvent) -> void:
 							# Zone placement will be drag-based (not implemented yet)
 							pass
 
-					# Default: terrain painting mode
-					is_painting = true
-					last_paint_pos = Vector2i(grid_x, grid_y)
-					_paint_cell(grid_x, grid_y)
-					get_tree().root.set_input_as_handled()
-					return
-
 		# Left release
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			is_painting = false
 			brush_cursor_pos = Vector2i(-1, -1)
 			queue_redraw()
 
-		# Right click: flood fill
-		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		# Right click: flood fill (terrain tool only)
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and active_tool == "terrain":
 			var local_pos = event.position
 			if _is_in_canvas(local_pos):
 				var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
@@ -722,19 +721,38 @@ func _update_stream_buttons() -> void:
 
 func _update_status() -> void:
 	var status = ""
-	match placement_mode:
-		"habitas":
-			status = "Mode: Place Habitas | Click to place, drag to move"
-		"azn":
-			status = "Mode: Place AZN | Click to place, drag to move"
-		"zone":
-			status = "Mode: Place Zone | Drag to create"
-		_:
+	match active_tool:
+		"terrain":
 			var density_name = _density_to_string(selected_density).to_upper()
-			status = "Terrain: %s | Click: paint | Right-click: fill | Scroll: zoom" % density_name
+			status = "Tool: Terrain (%s) | Click: paint | Right-click: fill | Scroll: zoom" % density_name
+		"stream":
+			var dir_name = _stream_dir_to_name(selected_stream_dir)
+			status = "Tool: Stream (%s) | Click to place stream" % dir_name
+		"habitas":
+			status = "Tool: Place Habitas | Click to place"
+		"azn":
+			status = "Tool: Place AZN | Click to place"
+		"zone":
+			status = "Tool: Place Zone | Drag to create rectangle"
 
 	if status_label:
 		status_label.text = status
+
+func _stream_dir_to_name(dir: int) -> String:
+	match dir:
+		StreamDir.NORTH: return "NORTH"
+		StreamDir.SOUTH: return "SOUTH"
+		StreamDir.EAST: return "EAST"
+		StreamDir.WEST: return "WEST"
+	return "NONE"
+
+func _activate_tool(tool_name: String) -> void:
+	"""Activate a tool exclusively - deactivates all other tools"""
+	active_tool = tool_name
+	is_painting = false
+	brush_cursor_pos = Vector2i(-1, -1)
+	_update_status()
+	queue_redraw()
 
 func _show_load_dialog() -> void:
 	var dir = DirAccess.open("res://maps/")
