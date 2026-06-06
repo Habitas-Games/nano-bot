@@ -44,6 +44,8 @@ var terrain_buttons: Dictionary = {}
 var stream_buttons: Dictionary = {}
 var undo_btn: Button
 var brush_cursor_pos: Vector2i = Vector2i(-1, -1)
+var hscroll: HScrollBar
+var vscroll: VScrollBar
 
 # History
 var history: Array = []
@@ -94,16 +96,47 @@ func _setup_ui() -> void:
 
 	# Toolbar (empty for now - buttons moved to right panel)
 
-	# Canvas spacer
-	var spacer = Control.new()
-	spacer.custom_minimum_size = Vector2(0, 500)
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left.add_child(spacer)
+	# Canvas with scrollbars
+	var canvas_container = HBoxContainer.new()
+	canvas_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	canvas_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_child(canvas_container)
 
-	# Scrollbar spacer
-	var scroll_spacer = Control.new()
-	scroll_spacer.custom_minimum_size = Vector2(0, 15)
-	left.add_child(scroll_spacer)
+	# Canvas area (for drawing) - grows to fill space
+	var canvas = Control.new()
+	canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	canvas_container.add_child(canvas)
+
+	# Vertical scrollbar
+	vscroll = VScrollBar.new()
+	vscroll.custom_minimum_size = Vector2(15, 0)
+	vscroll.step = 1
+	vscroll.value_changed.connect(func(val: float):
+		scroll_y = int(val)
+		queue_redraw()
+	)
+	canvas_container.add_child(vscroll)
+
+	# Horizontal scrollbar + corner
+	var hscroll_container = HBoxContainer.new()
+	hscroll_container.custom_minimum_size = Vector2(0, 15)
+	left.add_child(hscroll_container)
+
+	hscroll = HScrollBar.new()
+	hscroll.custom_minimum_size = Vector2(0, 15)
+	hscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hscroll.step = 1
+	hscroll.value_changed.connect(func(val: float):
+		scroll_x = int(val)
+		queue_redraw()
+	)
+	hscroll_container.add_child(hscroll)
+
+	# Corner spacer
+	var corner = Control.new()
+	corner.custom_minimum_size = Vector2(15, 15)
+	hscroll_container.add_child(corner)
 
 	# RIGHT: Control panel with expandable sections
 	var right = PanelContainer.new()
@@ -422,6 +455,7 @@ func _draw() -> void:
 	var cw = int(canvas_rect.size.x)
 	var ch = int(canvas_rect.size.y)
 
+	_update_scrollbars()
 	draw_rect(Rect2(cx, cy, cw, ch), Color(0.2, 0.2, 0.2))
 
 	# Draw cells
@@ -537,7 +571,7 @@ func _input(event: InputEvent) -> void:
 			get_tree().root.set_input_as_handled()
 			return
 
-		# Left click: paint cell
+		# Left click: paint, stream, or element placement
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			var local_pos = event.position
 			if _is_in_canvas(local_pos):
@@ -545,6 +579,34 @@ func _input(event: InputEvent) -> void:
 				var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
 
 				if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+					# Stream placement mode
+					if selected_stream_dir != StreamDir.NONE:
+						_save_state()
+						var idx = grid_y * map_width + grid_x
+						cells[idx]["stream_dir"] = selected_stream_dir
+						queue_redraw()
+						get_tree().root.set_input_as_handled()
+						return
+
+					# Element placement mode
+					match placement_mode:
+						"habitas":
+							_save_state()
+							habitas_points.append(Vector2i(grid_x, grid_y))
+							queue_redraw()
+							get_tree().root.set_input_as_handled()
+							return
+						"azn":
+							_save_state()
+							azn_nodes.append({"position": Vector2i(grid_x, grid_y), "quantity": 30})
+							queue_redraw()
+							get_tree().root.set_input_as_handled()
+							return
+						"zone":
+							# Zone placement will be drag-based (not implemented yet)
+							pass
+
+					# Default: terrain painting mode
 					is_painting = true
 					last_paint_pos = Vector2i(grid_x, grid_y)
 					_paint_cell(grid_x, grid_y)
@@ -706,6 +768,22 @@ func _update_status() -> void:
 
 	if status_label:
 		status_label.text = status
+
+func _update_scrollbars() -> void:
+	var canvas_width = int(canvas_rect.size.x)
+	var canvas_height = int(canvas_rect.size.y)
+	var map_pixel_width = int(map_width * CELL_SIZE * zoom)
+	var map_pixel_height = int(map_height * CELL_SIZE * zoom)
+
+	if hscroll:
+		hscroll.max_value = max(0, map_pixel_width - canvas_width)
+		hscroll.page = canvas_width
+		hscroll.value = scroll_x
+
+	if vscroll:
+		vscroll.max_value = max(0, map_pixel_height - canvas_height)
+		vscroll.page = canvas_height
+		vscroll.value = scroll_y
 
 func _show_load_dialog() -> void:
 	var dir = DirAccess.open("res://maps/")
