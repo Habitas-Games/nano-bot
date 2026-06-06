@@ -489,18 +489,23 @@ func _draw() -> void:
 			draw_texture_rect(azn_texture, Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), false)
 
 func _draw_stream_cell(screen_x: float, screen_y: float, size: float, stream_dir: int) -> void:
+	# Draw stream background texture
 	if stream_dir in [StreamDir.EAST, StreamDir.WEST]:
 		if stream_h_texture:
 			if stream_dir == StreamDir.WEST:
 				draw_texture_rect(stream_h_texture, Rect2(screen_x + size, screen_y, -size, size), false)
 			else:
 				draw_texture_rect(stream_h_texture, Rect2(screen_x, screen_y, size, size), false)
+		else:
+			draw_rect(Rect2(screen_x, screen_y, size, size), Color(0.4, 0.2, 0.2))
 	else:
 		if stream_v_texture:
 			if stream_dir == StreamDir.NORTH:
 				draw_texture_rect(stream_v_texture, Rect2(screen_x, screen_y + size, size, -size), false)
 			else:
 				draw_texture_rect(stream_v_texture, Rect2(screen_x, screen_y, size, size), false)
+		else:
+			draw_rect(Rect2(screen_x, screen_y, size, size), Color(0.4, 0.2, 0.2))
 
 	var center = Vector2(screen_x + size * 0.5, screen_y + size * 0.5)
 	var direction = _stream_to_vec(stream_dir)
