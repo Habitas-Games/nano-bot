@@ -516,6 +516,30 @@ if event is InputEventMouseMotion and is_painting:
 
 **Impact:** Helps identify texture loading issues and provides visual feedback that stream was placed (via arrow overlay) even if texture is missing.
 
+### Phase 2 Issue 4: Tool Deactivation Not Global
+
+**Problem Observed:** 
+1. Stream direction button selected but map still pans with middle-click
+2. Selecting stream tool doesn't fully deactivate terrain painting
+3. Pan tool not truly exclusive - middle-click works regardless of active tool
+
+**Root Cause:** 
+- Middle-click panning handler existed independent of tool system
+- Tool activation only cleared painting flag, not all state
+- No global deactivation before activating new tool
+
+**Solution Implemented:**
+1. Created `_deactivate_all_tools()` function for complete state reset
+2. Called before any tool activation
+3. Removed middle-click panning handler completely
+4. Users MUST select Pan tool button to pan (explicit control)
+
+**Benefits:**
+- Tool system is now truly exclusive (no overlapping operations)
+- Clear visual feedback (user clicks tool button = intent explicit)
+- No accidental panning while editing (middle-click disabled)
+- Consistent with design: All tools require explicit selection
+
 ### Next Phase (Phase 2): Terrain Editing
 
 Required for terrain editing to work:

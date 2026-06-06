@@ -120,13 +120,27 @@ func _activate_tool(tool_name: String) -> void:
 
 **Status:** Ready for testing - all Phase 2 terrain editing features implemented with proper tool isolation.
 
-### Bug Fix: Stream Rendering
+### Bug Fixes
 
 **Commit 7ada7a4:** Fix stream texture rendering - add fallback for missing textures
 - **Problem:** Last placed stream shows black instead of stream texture
 - **Root Cause:** If stream texture fails to load, only arrow lines draw
 - **Solution:** Added dark red fallback color if texture is null
 - **Benefit:** Debug info - black = texture loaded, dark red = texture missing
+
+**Commit 5fe14fe:** Fix tool deactivation - global reset before activating new tool
+- **Problem 1:** Stream direction button still pans map
+  - Root cause: Middle-click panning was always enabled
+  - Solution: Removed implicit middle-click panning
+  - Result: Only Pan tool can pan now
+- **Problem 2:** Tool deactivation incomplete
+  - Root cause: Only deactivated painting, not all state
+  - Solution: Created _deactivate_all_tools() function
+  - Result: Complete state reset before activation
+- **Problem 3:** Pan tool not truly exclusive
+  - Root cause: Middle-click bypassed tool exclusivity
+  - Solution: Removed middle-click handler completely
+  - Result: Users MUST select Pan tool to pan
 
 ### ❌ Phase 3+: Not Started
 - [ ] Stream placement (direction selector + click)
