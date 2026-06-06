@@ -44,8 +44,6 @@ var terrain_buttons: Dictionary = {}
 var stream_buttons: Dictionary = {}
 var undo_btn: Button
 var brush_cursor_pos: Vector2i = Vector2i(-1, -1)
-var hscroll: HScrollBar
-var vscroll: VScrollBar
 
 # History
 var history: Array = []
@@ -96,47 +94,11 @@ func _setup_ui() -> void:
 
 	# Toolbar (empty for now - buttons moved to right panel)
 
-	# Canvas with scrollbars
-	var canvas_container = HBoxContainer.new()
-	canvas_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	canvas_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_child(canvas_container)
-
-	# Canvas area (for drawing) - grows to fill space
-	var canvas = Control.new()
-	canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	canvas_container.add_child(canvas)
-
-	# Vertical scrollbar
-	vscroll = VScrollBar.new()
-	vscroll.custom_minimum_size = Vector2(15, 0)
-	vscroll.step = 1
-	vscroll.value_changed.connect(func(val: float):
-		scroll_y = int(val)
-		queue_redraw()
-	)
-	canvas_container.add_child(vscroll)
-
-	# Horizontal scrollbar + corner
-	var hscroll_container = HBoxContainer.new()
-	hscroll_container.custom_minimum_size = Vector2(0, 15)
-	left.add_child(hscroll_container)
-
-	hscroll = HScrollBar.new()
-	hscroll.custom_minimum_size = Vector2(0, 15)
-	hscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hscroll.step = 1
-	hscroll.value_changed.connect(func(val: float):
-		scroll_x = int(val)
-		queue_redraw()
-	)
-	hscroll_container.add_child(hscroll)
-
-	# Corner spacer
-	var corner = Control.new()
-	corner.custom_minimum_size = Vector2(15, 15)
-	hscroll_container.add_child(corner)
+	# Canvas area
+	var spacer = Control.new()
+	spacer.custom_minimum_size = Vector2(0, 500)
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(spacer)
 
 	# RIGHT: Control panel with expandable sections
 	var right = PanelContainer.new()
@@ -455,7 +417,6 @@ func _draw() -> void:
 	var cw = int(canvas_rect.size.x)
 	var ch = int(canvas_rect.size.y)
 
-	_update_scrollbars()
 	draw_rect(Rect2(cx, cy, cw, ch), Color(0.2, 0.2, 0.2))
 
 	# Draw cells
@@ -648,14 +609,20 @@ func _input(event: InputEvent) -> void:
 		get_tree().root.set_input_as_handled()
 		return
 
-	# Pan (middle-click drag)
+	# Pan (middle-click drag) with hand cursor
 	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MIDDLE:
+		set_default_cursor_shape(CURSOR_MOVE)
 		var delta = event.relative
 		var max_x = max(0, int(map_width * CELL_SIZE * zoom - cw))
 		var max_y = max(0, int(map_height * CELL_SIZE * zoom - ch))
 		scroll_x = clampi(scroll_x - int(delta.x), 0, max_x)
 		scroll_y = clampi(scroll_y - int(delta.y), 0, max_y)
 		queue_redraw()
+		return
+
+	# Reset cursor when not panning
+	if event is InputEventMouseMotion:
+		set_default_cursor_shape(CURSOR_ARROW)
 
 func _is_in_canvas(pos: Vector2) -> bool:
 	var cx = int(canvas_rect.position.x)
@@ -768,22 +735,6 @@ func _update_status() -> void:
 
 	if status_label:
 		status_label.text = status
-
-func _update_scrollbars() -> void:
-	var canvas_width = int(canvas_rect.size.x)
-	var canvas_height = int(canvas_rect.size.y)
-	var map_pixel_width = int(map_width * CELL_SIZE * zoom)
-	var map_pixel_height = int(map_height * CELL_SIZE * zoom)
-
-	if hscroll:
-		hscroll.max_value = max(0, map_pixel_width - canvas_width)
-		hscroll.page = canvas_width
-		hscroll.value = scroll_x
-
-	if vscroll:
-		vscroll.max_value = max(0, map_pixel_height - canvas_height)
-		vscroll.page = canvas_height
-		vscroll.value = scroll_y
 
 func _show_load_dialog() -> void:
 	var dir = DirAccess.open("res://maps/")
