@@ -161,9 +161,41 @@ func _activate_tool(tool_name: String) -> void:
   - Solution: Removed button and function completely
   - Reason: Not part of actual map editor design
 
-### ❌ Phase 4+: Not Started
-- [x] Stream placement (direction selector + click + drag) ✓ Done
-- [ ] Element placement (habitas, AZN, zones)
+### Phase 4: Element Editing (Delete & Edit Tools)
+
+**Commit 0a268ed:** Phase 4.1: Implement Delete tool - drag to erase everything
+- **Feature:** Delete tool in Tools section
+- **Usage:** Click + drag to erase everything (terrain, streams, elements)
+- **Result:** Complete erasure with single undo
+- **Implementation:** _delete_at_position() handles all deletions
+
+**Commit 428e0d4:** Phase 4.2: Implement Edit tool - select and move elements
+- **Feature:** Edit tool in Tools section for element manipulation
+- **Habitas:** Click to select, drag to move to new position
+- **AZN:** Click to select, drag to move to new position
+- **Zones:** Click to select, drag to move entire rectangle
+- **Selection:** Only one element selected at a time
+- **Implementation:** _find_element_at(), _move_habitas(), _move_azn(), _move_zone()
+
+**Commit 6e0afc9:** Add visual feedback for selected elements
+- **Highlights:** Yellow overlay for habitas/AZN, white overlay for zones
+- **Visual:** Clear indication of which element is being edited
+- **Immediate:** Appears when selected, disappears when deselected
+
+**Commit 2238e02:** Phase 4.3: Implement AZN hover tooltip
+- **Feature:** Hover over AZN node shows quantity value
+- **Display:** Text above marker, white color, scales with zoom
+- **Works:** In all tool modes
+
+### 🔄 Phase 4: In Progress
+- [x] Delete tool (drag to erase) ✓ Done
+- [x] Edit tool (click to select, drag to move) ✓ Done
+- [x] Edit visual feedback (highlights) ✓ Done
+- [x] AZN hover tooltip ✓ Done
+- [ ] AZN quantity editing (edit mode popup/spinner)
+- [ ] Zone resize (drag corners)
+
+### ❌ Phase 5+: Not Started
 - [ ] File save (JSON export)
 - [ ] Validation (map checking)
 - [ ] Polish (keyboard shortcuts, etc.)
