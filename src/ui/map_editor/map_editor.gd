@@ -50,6 +50,11 @@ var edit_selected_type: String = ""  # "habitas", "azn", "zone"
 var edit_selected_index: int = -1
 var edit_drag_offset: Vector2i = Vector2i.ZERO
 
+# AZN hover state
+var azn_hover_index: int = -1
+var azn_hover_time: float = 0.0
+const AZN_HOVER_DELAY: float = 0.3
+
 # History
 var history: Array = []
 var history_index: int = -1
@@ -518,6 +523,17 @@ func _draw() -> void:
 		if edit_selected_type == "azn" and edit_selected_index == i:
 			draw_rect(Rect2(screen_x, screen_y, CELL_SIZE * zoom, CELL_SIZE * zoom), Color(1.0, 1.0, 0.0, 0.4))
 
+	# Draw AZN hover tooltip
+	if azn_hover_index >= 0 and azn_hover_index < azn_nodes.size():
+		var azn = azn_nodes[azn_hover_index]
+		var pos = azn["position"]
+		var screen_x = cx + (pos.x * CELL_SIZE * zoom) - scroll_x
+		var screen_y = cy + (pos.y * CELL_SIZE * zoom) - scroll_y
+		var quantity_text = str(azn["quantity"])
+		var font = get_theme_font("font")
+		if font:
+			draw_string(font, Vector2(screen_x + CELL_SIZE * zoom / 2 - 5, screen_y - 15), quantity_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color.WHITE)
+
 func _draw_stream_cell(screen_x: float, screen_y: float, size: float, stream_dir: int) -> void:
 	# Draw stream background texture
 	if stream_dir in [StreamDir.EAST, StreamDir.WEST]:
@@ -726,12 +742,37 @@ func _input(event: InputEvent) -> void:
 	# Middle-click is disabled - use Pan tool instead for explicit control
 	# (Pan tool is in Tools section and uses left-click drag)
 
-	# Update cursor based on active tool
+	# Update cursor based on active tool and check AZN hover
 	if event is InputEventMouseMotion:
 		if active_tool == "pan":
 			set_default_cursor_shape(CURSOR_MOVE)
 		else:
 			set_default_cursor_shape(CURSOR_ARROW)
+
+		# Check AZN hover for tooltip
+		var local_pos = event.position
+		if _is_in_canvas(local_pos):
+			var grid_x = int((local_pos.x - cx + scroll_x) / (CELL_SIZE * zoom))
+			var grid_y = int((local_pos.y - cy + scroll_y) / (CELL_SIZE * zoom))
+
+			if grid_x >= 0 and grid_x < map_width and grid_y >= 0 and grid_y < map_height:
+				var pos = Vector2i(grid_x, grid_y)
+				var found_azn = -1
+				for i in range(azn_nodes.size()):
+					if azn_nodes[i]["position"] == pos:
+						found_azn = i
+						break
+
+				if found_azn >= 0:
+					azn_hover_index = found_azn
+					azn_hover_time = 0.0
+					queue_redraw()
+				else:
+					azn_hover_index = -1
+			else:
+				azn_hover_index = -1
+		else:
+			azn_hover_index = -1
 
 func _delete_at_position(x: int, y: int) -> void:
 	"""Delete everything at grid position"""
