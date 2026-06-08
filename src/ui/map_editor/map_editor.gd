@@ -49,6 +49,7 @@ var brush_cursor_pos: Vector2i = Vector2i(-1, -1)
 var edit_selected_type: String = ""  # "habitas", "azn", "zone"
 var edit_selected_index: int = -1
 var edit_drag_offset: Vector2i = Vector2i.ZERO
+var zone_resize_corner: String = ""  # "tl", "tr", "bl", "br" or ""
 
 # AZN hover state
 var azn_hover_index: int = -1
@@ -536,6 +537,17 @@ func _draw() -> void:
 		if edit_selected_type == "zone" and edit_selected_index == i:
 			draw_rect(Rect2(screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), Color(1.0, 1.0, 1.0, 0.3))
 
+			# Draw resize handles at corners
+			var handle_size = 8
+			var corners = [
+				Vector2(screen_x1, screen_y1),  # TL
+				Vector2(screen_x2, screen_y1),  # TR
+				Vector2(screen_x1, screen_y2),  # BL
+				Vector2(screen_x2, screen_y2)   # BR
+			]
+			for corner in corners:
+				draw_rect(Rect2(corner - Vector2(handle_size/2, handle_size/2), Vector2(handle_size, handle_size)), Color.YELLOW)
+
 	# Draw habitas points
 	for i in range(habitas_points.size()):
 		var hp = habitas_points[i]
@@ -700,6 +712,15 @@ func _input(event: InputEvent) -> void:
 										edit_selected_index = element["index"]
 										is_painting = true
 										_save_state()
+
+										# For zones, check if clicking on corner (resize mode)
+										if element["type"] == "zone":
+											var corner = _detect_zone_corner(grid_x, grid_y, injection_zones[element["index"]])
+											if corner != "":
+												zone_resize_corner = corner
+										else:
+											zone_resize_corner = ""
+
 										_update_status()
 										queue_redraw()
 										get_tree().root.set_input_as_handled()
@@ -778,10 +799,15 @@ func _input(event: InputEvent) -> void:
 						elif edit_selected_type == "azn":
 							_move_azn(edit_selected_index, Vector2i(grid_x, grid_y))
 						elif edit_selected_type == "zone":
-							var offset = Vector2i(grid_x, grid_y) - last_paint_pos
-							if offset != Vector2i.ZERO:
-								_move_zone(edit_selected_index, offset)
-								last_paint_pos = Vector2i(grid_x, grid_y)
+							if zone_resize_corner != "":
+								# Resize mode: resize from corner
+								_resize_zone(edit_selected_index, zone_resize_corner, grid_x, grid_y)
+							else:
+								# Move mode: drag to move zone
+								var offset = Vector2i(grid_x, grid_y) - last_paint_pos
+								if offset != Vector2i.ZERO:
+									_move_zone(edit_selected_index, offset)
+									last_paint_pos = Vector2i(grid_x, grid_y)
 
 		get_tree().root.set_input_as_handled()
 		return
@@ -867,6 +893,7 @@ func _deselect_edit_element() -> void:
 	"""Deselect currently selected element"""
 	edit_selected_type = ""
 	edit_selected_index = -1
+	zone_resize_corner = ""
 	queue_redraw()
 
 func _move_habitas(index: int, new_pos: Vector2i) -> void:
@@ -891,6 +918,54 @@ func _move_zone(index: int, offset: Vector2i) -> void:
 	if new_pos.x >= 0 and new_pos.y >= 0 and new_pos.x + rect.size.x <= map_width and new_pos.y + rect.size.y <= map_height:
 		injection_zones[index]["rect"] = Rect2i(new_pos, rect.size)
 		queue_redraw()
+
+func _detect_zone_corner(grid_x: int, grid_y: int, zone: Dictionary) -> String:
+	"""Detect which corner of zone is near the given position. Returns 'tl', 'tr', 'bl', 'br', or ''"""
+	var rect = zone["rect"]
+	var pos = Vector2i(grid_x, grid_y)
+	var corners = {
+		"tl": rect.position,
+		"tr": rect.position + Vector2i(rect.size.x - 1, 0),
+		"bl": rect.position + Vector2i(0, rect.size.y - 1),
+		"br": rect.position + rect.size - Vector2i(1, 1)
+	}
+
+	for corner_name in corners:
+		if pos.distance_to(corners[corner_name]) <= 1.5:
+			return corner_name
+	return ""
+
+func _resize_zone(index: int, corner: String, new_grid_x: int, new_grid_y: int) -> void:
+	"""Resize zone from specified corner"""
+	var zone = injection_zones[index]
+	var rect = zone["rect"]
+	var new_pos = Vector2i(new_grid_x, new_grid_y)
+
+	match corner:
+		"tl":  # Top-left corner - adjust position and size
+			var new_width = (rect.position.x + rect.size.x) - new_pos.x
+			var new_height = (rect.position.y + rect.size.y) - new_pos.y
+			if new_width >= 2 and new_height >= 2 and new_pos.x >= 0 and new_pos.y >= 0:
+				injection_zones[index]["rect"] = Rect2i(new_pos, Vector2i(new_width, new_height))
+				queue_redraw()
+		"tr":  # Top-right corner
+			var new_width = new_pos.x - rect.position.x + 1
+			var new_height = (rect.position.y + rect.size.y) - new_pos.y
+			if new_width >= 2 and new_height >= 2 and new_pos.x < map_width and new_pos.y >= 0:
+				injection_zones[index]["rect"] = Rect2i(Vector2i(rect.position.x, new_pos.y), Vector2i(new_width, new_height))
+				queue_redraw()
+		"bl":  # Bottom-left corner
+			var new_width = (rect.position.x + rect.size.x) - new_pos.x
+			var new_height = new_pos.y - rect.position.y + 1
+			if new_width >= 2 and new_height >= 2 and new_pos.x >= 0 and new_pos.y < map_height:
+				injection_zones[index]["rect"] = Rect2i(Vector2i(new_pos.x, rect.position.y), Vector2i(new_width, new_height))
+				queue_redraw()
+		"br":  # Bottom-right corner
+			var new_width = new_pos.x - rect.position.x + 1
+			var new_height = new_pos.y - rect.position.y + 1
+			if new_width >= 2 and new_height >= 2 and new_pos.x < map_width and new_pos.y < map_height:
+				injection_zones[index]["rect"] = Rect2i(rect.position, Vector2i(new_width, new_height))
+				queue_redraw()
 
 func _is_in_canvas(pos: Vector2) -> bool:
 	var cx = int(canvas_rect.position.x)
