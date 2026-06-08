@@ -55,6 +55,10 @@ var azn_hover_index: int = -1
 var azn_hover_time: float = 0.0
 const AZN_HOVER_DELAY: float = 0.3
 
+# AZN quantity editor dialog
+var azn_edit_dialog: ConfirmationDialog
+var azn_quantity_input: SpinBox
+
 # History
 var history: Array = []
 var history_index: int = -1
@@ -303,6 +307,40 @@ func _setup_ui() -> void:
 	undo_btn.disabled = true
 	undo_btn.pressed.connect(_undo)
 	panel.add_child(undo_btn)
+
+	# Setup AZN quantity editor dialog
+	_setup_azn_quantity_dialog()
+
+func _setup_azn_quantity_dialog() -> void:
+	"""Create the AZN quantity editor dialog"""
+	azn_edit_dialog = ConfirmationDialog.new()
+	azn_edit_dialog.title = "Edit AZN Quantity"
+	azn_edit_dialog.size = Vector2i(300, 150)
+	add_child(azn_edit_dialog)
+
+	var vbox = VBoxContainer.new()
+	azn_edit_dialog.add_child(vbox)
+
+	var label = Label.new()
+	label.text = "Quantity:"
+	vbox.add_child(label)
+
+	azn_quantity_input = SpinBox.new()
+	azn_quantity_input.min_value = 1
+	azn_quantity_input.max_value = 9999
+	azn_quantity_input.value = 10
+	azn_quantity_input.custom_minimum_size = Vector2(200, 0)
+	vbox.add_child(azn_quantity_input)
+
+	azn_edit_dialog.confirmed.connect(_on_azn_quantity_confirmed)
+
+func _on_azn_quantity_confirmed() -> void:
+	"""Called when user confirms AZN quantity edit"""
+	if edit_selected_type == "azn" and edit_selected_index >= 0:
+		var new_qty = int(azn_quantity_input.value)
+		_save_state()
+		azn_nodes[edit_selected_index]["quantity"] = new_qty
+		queue_redraw()
 
 func _get_density_cost_text(density: int) -> String:
 	match density:
@@ -579,6 +617,15 @@ func _input(event: InputEvent) -> void:
 	var cy = int(canvas_rect.position.y)
 	var cw = int(canvas_rect.size.x)
 	var ch = int(canvas_rect.size.y)
+
+	# Keyboard input for edit mode
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY.RETURN and active_tool == "edit" and edit_selected_type == "azn":
+			# Show AZN quantity editor
+			azn_quantity_input.value = azn_nodes[edit_selected_index]["quantity"]
+			azn_edit_dialog.popup_centered()
+			get_tree().root.set_input_as_handled()
+			return
 
 	# Zoom
 	if event is InputEventMouseButton:
