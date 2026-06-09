@@ -632,7 +632,7 @@ func _input(event: InputEvent) -> void:
 
 	# Keyboard input for edit mode
 	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY.RETURN and active_tool == "edit" and edit_selected_type == "azn":
+		if event.keycode == 4194309 and active_tool == "edit" and edit_selected_type == "azn":  # 4194309 = Enter key
 			# Show AZN quantity editor
 			azn_quantity_input.value = azn_nodes[edit_selected_index]["quantity"]
 			azn_edit_dialog.popup_centered()
