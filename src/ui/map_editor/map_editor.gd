@@ -1143,4 +1143,232 @@ func _show_load_dialog() -> void:
 	popup.popup_centered_ratio(0.3)
 
 func _show_save_dialog() -> void:
-	print("Save not yet implemented (Phase 5)")
+	var errors = _validate_map()
+	if errors.size() > 0:
+		var error_msg = "Map incomplete:\n" + "\n".join(errors) + "\n\nContinue anyway?"
+		var dialog = ConfirmationDialog.new()
+		dialog.title = "Validation Warning"
+		dialog.dialog_text = error_msg
+		add_child(dialog)
+		dialog.confirmed.connect(func(): _show_save_filename_dialog(); dialog.queue_free())
+		dialog.cancelled.connect(func(): dialog.queue_free())
+		dialog.popup_centered_ratio(0.4)
+	else:
+		_show_save_filename_dialog()
+
+func _show_save_filename_dialog() -> void:
+	var file_dialog = FileDialog.new()
+	file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	file_dialog.filters = ["*.json ; JSON Map Files"]
+	file_dialog.current_dir = "res://maps/"
+	file_dialog.current_file = "my_map.json"
+	add_child(file_dialog)
+
+	file_dialog.file_selected.connect(func(path: String):
+		_save_map(path)
+		file_dialog.queue_free()
+	)
+	file_dialog.cancelled.connect(func(): file_dialog.queue_free())
+
+	file_dialog.popup_centered_ratio(0.6)
+
+func _save_map(filepath: String) -> void:
+	"""Save current map to JSON file"""
+	var json_data = _create_map_json()
+	var json_string = JSON.stringify(json_data)
+
+	var file = FileAccess.open(filepath, FileAccess.WRITE)
+	if file == null:
+		_show_error("Failed to save map to " + filepath)
+		return
+
+	file.store_string(json_string)
+	_show_notification("Map saved: " + filepath.get_file())
+
+func _create_map_json() -> Dictionary:
+	"""Export current map state to JSON dictionary"""
+	var json = {
+		"name": "Custom Map",
+		"width": map_width,
+		"height": map_height,
+		"default_density": "low",
+		"starting_azn": 150,
+		"cells": [],
+		"habitas_points": [],
+		"azn_nodes": [],
+		"injection_zones": []
+	}
+
+	# Export cells (only non-default density and streams)
+	for i in range(cells.size()):
+		var cell = cells[i]
+		if cell["density"] != Density.LOW or cell["stream_dir"] != StreamDir.NONE:
+			var x = i % map_width
+			var y = i / map_width
+			var cell_obj = {
+				"x": x,
+				"y": y,
+				"density": _density_to_string(cell["density"])
+			}
+			if cell["stream_dir"] != StreamDir.NONE:
+				cell_obj["stream"] = _stream_to_string(cell["stream_dir"])
+			json["cells"].append(cell_obj)
+
+	# Export habitas
+	for hp in habitas_points:
+		json["habitas_points"].append({"x": hp.x, "y": hp.y})
+
+	# Export AZN
+	for azn in azn_nodes:
+		json["azn_nodes"].append({
+			"x": azn["position"].x,
+			"y": azn["position"].y,
+			"quantity": azn["quantity"]
+		})
+
+	# Export zones
+	for zone in injection_zones:
+		var rect = zone["rect"]
+		json["injection_zones"].append({
+			"player": zone["player"],
+			"x1": rect.position.x,
+			"y1": rect.position.y,
+			"x2": rect.position.x + rect.size.x - 1,
+			"y2": rect.position.y + rect.size.y - 1
+		})
+
+	return json
+
+func _validate_map() -> Array:
+	"""Validate map has required elements. Returns array of error strings (empty = valid)"""
+	var errors = []
+
+	if habitas_points.size() == 0:
+		errors.append("Need at least 1 Habitas Point")
+
+	if azn_nodes.size() == 0:
+		errors.append("Need at least 1 AZN Node")
+
+	if injection_zones.size() == 0:
+		errors.append("Need at least 1 Injection Zone")
+
+	return errors
+
+# Conversion functions
+func _density_to_string(d: int) -> String:
+	"""Convert density enum to JSON string"""
+	match d:
+		Density.LOW: return "low"
+		Density.MEDIUM: return "medium"
+		Density.HIGH: return "high"
+		Density.BONE: return "bone"
+	return "low"
+
+func _stream_to_string(s: int) -> String:
+	"""Convert stream enum to JSON string"""
+	match s:
+		StreamDir.NORTH: return "north"
+		StreamDir.SOUTH: return "south"
+		StreamDir.EAST: return "east"
+		StreamDir.WEST: return "west"
+	return ""
+
+func _string_to_density(s: String) -> int:
+	"""Convert JSON string to density enum"""
+	match s.to_lower():
+		"low": return Density.LOW
+		"medium": return Density.MEDIUM
+		"high": return Density.HIGH
+		"bone": return Density.BONE
+	return Density.LOW
+
+func _string_to_stream(s: String) -> int:
+	"""Convert JSON string to stream enum"""
+	match s.to_lower():
+		"north": return StreamDir.NORTH
+		"south": return StreamDir.SOUTH
+		"east": return StreamDir.EAST
+		"west": return StreamDir.WEST
+	return StreamDir.NONE
+
+func _load_map_from_file(filepath: String) -> void:
+	"""Load map from JSON file"""
+	var file = FileAccess.open(filepath, FileAccess.READ)
+	if file == null:
+		_show_error("Failed to load map from " + filepath)
+		return
+
+	var json_string = file.get_as_text()
+	var json = JSON.parse_string(json_string)
+
+	if json == null:
+		_show_error("Invalid JSON format in " + filepath)
+		return
+
+	# Clear current map
+	_clear_map()
+
+	# Load dimensions
+	map_width = json.get("width", 80)
+	map_height = json.get("height", 80)
+
+	# Resize cells array
+	cells.clear()
+	for i in range(map_width * map_height):
+		cells.append({"density": Density.LOW, "stream_dir": StreamDir.NONE})
+
+	# Load cells
+	for cell_data in json.get("cells", []):
+		var x = cell_data.get("x", 0)
+		var y = cell_data.get("y", 0)
+		if x >= 0 and x < map_width and y >= 0 and y < map_height:
+			var idx = y * map_width + x
+			cells[idx]["density"] = _string_to_density(cell_data.get("density", "low"))
+			if cell_data.has("stream"):
+				cells[idx]["stream_dir"] = _string_to_stream(cell_data.get("stream", ""))
+
+	# Load habitas
+	habitas_points.clear()
+	for hp in json.get("habitas_points", []):
+		habitas_points.append(Vector2i(hp.get("x", 0), hp.get("y", 0)))
+
+	# Load AZN nodes
+	azn_nodes.clear()
+	for azn in json.get("azn_nodes", []):
+		azn_nodes.append({
+			"position": Vector2i(azn.get("x", 0), azn.get("y", 0)),
+			"quantity": azn.get("quantity", 10)
+		})
+
+	# Load zones
+	injection_zones.clear()
+	for zone in json.get("injection_zones", []):
+		var x1 = zone.get("x1", 0)
+		var y1 = zone.get("y1", 0)
+		var x2 = zone.get("x2", 0)
+		var y2 = zone.get("y2", 0)
+		injection_zones.append({
+			"player": zone.get("player", 0),
+			"rect": Rect2i(x1, y1, x2 - x1 + 1, y2 - y1 + 1)
+		})
+
+	# Clear undo history
+	history.clear()
+	history_index = -1
+
+	queue_redraw()
+	_show_notification("Map loaded: " + filepath.get_file())
+
+func _show_notification(msg: String) -> void:
+	"""Show brief notification message"""
+	if status_label:
+		status_label.text = msg
+
+func _show_error(msg: String) -> void:
+	"""Show error dialog"""
+	var dialog = AcceptDialog.new()
+	dialog.title = "Error"
+	dialog.dialog_text = msg
+	add_child(dialog)
+	dialog.confirmed.connect(func(): dialog.queue_free())
+	dialog.popup_centered_ratio(0.4)
