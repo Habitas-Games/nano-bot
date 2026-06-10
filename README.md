@@ -22,7 +22,8 @@ Participants write a single GDScript strategy file that controls a fleet of nano
 navigating a grid of living tissue. Bots collect AZN energy molecules, claim **Habitas Points**, 
 and outscore the opponent over 1 500 turns.
 
-The simulation runs headless at hundreds of turns per second. A built-in replay viewer 
+The simulation runs headless at hundreds of turns per second. A **visual map editor** lets you design 
+custom tissue layouts with terrain, streams, spawn points, and resource nodes. A built-in replay viewer 
 lets you scrub through every turn, inspect bots, zoom into the map, and watch event effects.
 
 ---
